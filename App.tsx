@@ -1,5 +1,7 @@
 
 
+
+
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Language, Indicator, Pillar, ProbingQuestion, ProbingAnswers, LoadingTip } from './types';
 import { PILLARS, SCORE_INTERPRETATIONS, SECTOR_BENCHMARKS, KEY_RESOURCES, PROBING_QUESTIONS, QUESTION_BANK, LOADING_TIPS } from './constants';
@@ -170,6 +172,15 @@ const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => 
     );
 };
 
+const Tooltip: React.FC<{ text: React.ReactNode; children: React.ReactNode; }> = ({ text, children }) => {
+    return (
+        <div className="tooltip-container">
+            {children}
+            <div className="tooltip-text">{text}</div>
+        </div>
+    );
+};
+
 const IndicatorRow: React.FC<{ 
     indicator: Indicator; 
     currentScore: number; 
@@ -177,31 +188,51 @@ const IndicatorRow: React.FC<{
     language: Language; 
     onReplace: (pillarId: number, questionId: string) => void;
     canReplace: boolean;
-}> = ({ indicator, currentScore, onScoreChange, language, onReplace, canReplace }) => (
-    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center py-4 border-b border-gray-200 last:border-b-0">
-      <div className="md:col-span-5"><p className="font-medium text-brand-gray-700">{indicator.text[language]}</p></div>
-      <div className="md:col-span-7 flex items-center gap-2">
-        <select value={currentScore} onChange={(e) => onScoreChange(indicator.id, parseInt(e.target.value, 10))} className="flex-grow p-2 border border-brand-gray-300 rounded-md shadow-sm focus:ring-brand-green focus:border-brand-green transition-all">
-          <option value="-1" disabled>{language === 'en' ? 'Select an option...' : 'একটি বিকল্প নির্বাচন করুন...'}</option>
-          {indicator.scoringGuide.map(option => (
-            <option key={option.score} value={option.score}>{option.score} - {option.description[language]}</option>
-          ))}
-        </select>
-        <div className="w-20 text-center">
-             <span className="font-bold text-xl text-brand-green">{currentScore > -1 ? currentScore : '-'}</span>
-             <span className="text-gray-500"> / {indicator.maxScore}</span>
+}> = ({ indicator, currentScore, onScoreChange, language, onReplace, canReplace }) => {
+    const tooltipContent = (
+        <div className="text-sm">
+            <p className="font-bold mb-2">{language === 'en' ? 'Scoring Guide:' : 'স্কোরিং নির্দেশিকা:'}</p>
+            <ul className="space-y-1">
+                {indicator.scoringGuide.map(option => (
+                    <li key={option.score}>
+                        <span className="font-semibold">{option.score} Pts:</span> {option.description[language]}
+                    </li>
+                ))}
+            </ul>
         </div>
-        <button 
-            onClick={() => onReplace(indicator.pillarId, indicator.id)} 
-            disabled={!canReplace}
-            title={language === 'en' ? 'Replace Question' : 'প্রশ্ন প্রতিস্থাপন করুন'}
-            className="p-2 text-gray-500 hover:text-brand-green disabled:text-gray-300 disabled:cursor-not-allowed transition-colors transform hover:rotate-45 duration-300"
-        >
-            <i className="fa-solid fa-arrows-rotate fa-lg"></i>
-        </button>
-      </div>
-    </div>
-);
+    );
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center py-4 border-b border-gray-200 last:border-b-0">
+            <div className="md:col-span-5 flex items-center gap-2">
+                <p className="font-medium text-brand-gray-700">{indicator.text[language]}</p>
+                <Tooltip text={tooltipContent}>
+                    <i className="fa-solid fa-circle-info text-gray-400 hover:text-brand-teal cursor-pointer"></i>
+                </Tooltip>
+            </div>
+            <div className="md:col-span-7 flex items-center gap-2">
+                <select value={currentScore} onChange={(e) => onScoreChange(indicator.id, parseInt(e.target.value, 10))} className="flex-grow p-2 border border-brand-gray-300 rounded-md shadow-sm focus:ring-brand-green focus:border-brand-green transition-all">
+                    <option value="-1" disabled>{language === 'en' ? 'Select an option...' : 'একটি বিকল্প নির্বাচন করুন...'}</option>
+                    {indicator.scoringGuide.map(option => (
+                        <option key={option.score} value={option.score}>{option.score} - {option.description[language]}</option>
+                    ))}
+                </select>
+                <div className="w-20 text-center">
+                    <span className="font-bold text-xl text-brand-green">{currentScore > -1 ? currentScore : '-'}</span>
+                    <span className="text-gray-500"> / {indicator.maxScore}</span>
+                </div>
+                <button 
+                    onClick={() => onReplace(indicator.pillarId, indicator.id)} 
+                    disabled={!canReplace}
+                    title={language === 'en' ? 'Replace Question' : 'প্রশ্ন প্রতিস্থাপন করুন'}
+                    className="p-2 text-gray-500 hover:text-brand-green disabled:text-gray-300 disabled:cursor-not-allowed transition-colors transform hover:rotate-45 duration-300"
+                >
+                    <i className="fa-solid fa-arrows-rotate fa-lg"></i>
+                </button>
+            </div>
+        </div>
+    );
+};
 
 const PillarCard: React.FC<{ 
     pillar: Pillar; 
@@ -429,11 +460,13 @@ Now, provide your expert recommendations in HTML format.`;
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
+                // FIX: Add type assertion for the JSON response to handle potential 'unknown' type.
+                const errorData = await response.json() as { error?: string };
                 throw new Error(errorData.error || `Request failed with status ${response.status}`);
             }
 
-            const data = await response.json();
+            // FIX: Add type assertion for the JSON response to handle potential 'unknown' type.
+            const data = await response.json() as { text: string };
             setRecommendations(data.text);
 
         } catch (e) {
