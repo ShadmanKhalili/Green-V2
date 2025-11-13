@@ -69,3 +69,10 @@ export interface ProbingQuestion {
 export interface ProbingAnswers {
     [key: string]: string | string[];
 }
+
+// --- New type for loading tips ---
+
+export interface LoadingTip {
+  en: string;
+  bn: string;
+}

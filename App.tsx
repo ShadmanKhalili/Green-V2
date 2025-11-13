@@ -1,8 +1,8 @@
 
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Language, Indicator, Pillar, ProbingQuestion, ProbingAnswers } from './types';
-import { PILLARS, SCORE_INTERPRETATIONS, SECTOR_BENCHMARKS, KEY_RESOURCES, PROBING_QUESTIONS, QUESTION_BANK } from './constants';
+import { Language, Indicator, Pillar, ProbingQuestion, ProbingAnswers, LoadingTip } from './types';
+import { PILLARS, SCORE_INTERPRETATIONS, SECTOR_BENCHMARKS, KEY_RESOURCES, PROBING_QUESTIONS, QUESTION_BANK, LOADING_TIPS } from './constants';
 import { GoogleGenAI } from "@google/genai";
 
 declare global {
@@ -296,6 +296,16 @@ const AIRecommendations: React.FC<{ scores: { [key: string]: number }; assessmen
     const [recommendations, setRecommendations] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [currentTipIndex, setCurrentTipIndex] = useState(0);
+
+    useEffect(() => {
+        if (loading) {
+            const timer = setInterval(() => {
+                setCurrentTipIndex(prevIndex => (prevIndex + 1) % LOADING_TIPS.length);
+            }, 3000); // Change tip every 3 seconds
+            return () => clearInterval(timer);
+        }
+    }, [loading]);
 
     const generateRecommendations = async () => {
         setLoading(true);
@@ -357,9 +367,10 @@ Now, provide your expert recommendations.`;
         <div className="bg-white rounded-xl shadow-lg p-8 my-8">
             <h2 className="text-2xl font-bold text-green-800 mb-4">{language === 'en' ? 'AI-Generated Recommendations' : 'AI-জেনারেটেড সুপারিশ'}</h2>
             {loading && (
-                 <div className="flex items-center justify-center py-8">
+                 <div className="flex flex-col items-center justify-center py-8 text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-700"></div>
-                    <p className="ml-4 text-gray-600">{language === 'en' ? 'Generating personalized advice...' : 'ব্যক্তিগত পরামর্শ তৈরি করা হচ্ছে...'}</p>
+                    <p className="mt-4 text-gray-600 font-semibold">{language === 'en' ? 'Generating personalized advice...' : 'ব্যক্তিগত পরামর্শ তৈরি করা হচ্ছে...'}</p>
+                    <p className="mt-4 text-sm text-gray-500 h-10 transition-opacity duration-500">{LOADING_TIPS[currentTipIndex][language]}</p>
                 </div>
             )}
             {error && <p className="text-red-500">{error}</p>}
@@ -436,6 +447,59 @@ const AssessmentScreen: React.FC<{
     );
 };
 
+interface PillarScoreData {
+    title: string;
+    score: number;
+    maxScore: number;
+    weight: number;
+    weightedScore: number;
+}
+
+const pillarColors = [
+  'bg-blue-500',
+  'bg-purple-500',
+  'bg-pink-500',
+  'bg-orange-500',
+  'bg-indigo-500',
+];
+
+const PillarScoresChart: React.FC<{ pillarScores: PillarScoreData[]; language: Language; }> = ({ pillarScores, language }) => {
+    const [animatedScores, setAnimatedScores] = useState<number[]>([]);
+
+    useEffect(() => {
+        const timeout = setTimeout(() => {
+            setAnimatedScores(pillarScores.map(p => p.weight > 0 ? (p.weightedScore / p.weight) * 100 : 0));
+        }, 100);
+        return () => clearTimeout(timeout);
+    }, [pillarScores]);
+
+    return (
+        <div className="bg-white rounded-xl shadow-lg p-8 my-8">
+            <h3 className="text-2xl font-bold text-gray-800 mb-6 text-center">
+                {language === 'en' ? 'Performance by Pillar' : 'স্তম্ভ অনুযায়ী কর্মক্ষমতা'}
+            </h3>
+            <div className="space-y-4">
+                {pillarScores.map((pillar, index) => (
+                    <div key={pillar.title}>
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="font-semibold text-gray-700">{pillar.title}</span>
+                            <span className="font-bold text-gray-800">{pillar.weightedScore} / {pillar.weight}</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-6 overflow-hidden">
+                            <div
+                                className={`${pillarColors[index % pillarColors.length]} h-6 rounded-full text-white flex items-center justify-center text-sm font-bold transition-all duration-1000 ease-out`}
+                                style={{ width: `${animatedScores[index] || 0}%` }}
+                            >
+                                {Math.round(animatedScores[index] || 0)}%
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 const ResultsPage: React.FC<{
     totalScore: number;
     scores: { [key: string]: number };
@@ -450,7 +514,11 @@ const ResultsPage: React.FC<{
 
     const pillarScores = useMemo(() => {
         return assessmentData.map(pillar => {
-            const pillarScore = pillar.indicators.reduce((acc, ind) => acc + (scores[ind.id] > -1 ? scores[ind.id] : 0), 0);
+            // FIX: Add a type guard to ensure the score is a number before comparison. This resolves a TypeScript error.
+            const pillarScore = pillar.indicators.reduce((acc, ind) => {
+                const score = scores[ind.id];
+                return acc + (typeof score === 'number' && score > -1 ? score : 0);
+            }, 0);
             const maxPillarScore = pillar.indicators.reduce((acc, ind) => acc + ind.maxScore, 0);
             const weightedScore = maxPillarScore > 0 ? (pillarScore / maxPillarScore) * pillar.points : 0;
             return {
@@ -538,6 +606,7 @@ const ResultsPage: React.FC<{
         <div className="max-w-4xl mx-auto">
             <div id="results-page-content">
                 <ResultsSummaryCard totalScore={totalScore} language={language} />
+                <PillarScoresChart pillarScores={pillarScores} language={language} />
                 <AIRecommendations scores={scores} assessmentData={assessmentData} probingAnswers={probingAnswers} language={language} />
                 <InfoSection language={language} />
             </div>

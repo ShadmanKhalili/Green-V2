@@ -1,5 +1,5 @@
 
-import { Pillar, ScoreInterpretation, Resource, ProbingQuestion, Indicator } from './types';
+import { Pillar, ScoreInterpretation, Resource, ProbingQuestion, Indicator, LoadingTip } from './types';
 
 export const PILLARS: Omit<Pillar, 'indicators' | 'notes'>[] = [
   { id: 1, title: { en: 'Energy & Resource Efficiency', bn: 'শক্তি ও সম্পদ দক্ষতা' }, points: 30 },
@@ -772,4 +772,13 @@ export const KEY_RESOURCES: Resource[] = [
     { name: { en: 'SME Foundation', bn: 'এসএমই ফাউন্ডেশন' }, contact: 'Helpline: ১৯৫, www.smef.gov.bd' },
     { name: { en: 'BGMEA Sustainability Team', bn: 'বিজিএমইএ টেকসই দল' }, contact: 'For garment factories' },
     { name: { en: 'IDCOL', bn: 'ইডকল' }, contact: 'For solar financing (www.idcol.org)' },
+];
+
+export const LOADING_TIPS: LoadingTip[] = [
+    { en: "Did you know? Switching to LED lights can reduce your lighting energy consumption by up to 80%.", bn: "আপনি কি জানেন? এলইডি লাইটে স্যুইচ করলে আপনার আলোর শক্তি খরচ ৮০% পর্যন্ত কমাতে পারে।" },
+    { en: "Tip: Regularly check for and fix water leaks. A single dripping tap can waste over 15 liters of water a day!", bn: "টিপ: নিয়মিত জলের লিক পরীক্ষা করুন এবং মেরামত করুন। একটি ট্যাপ থেকে ফোঁটা ফোঁটা জল দিনে ১৫ লিটারের বেশি জল নষ্ট করতে পারে!" },
+    { en: "Fact: In Bangladesh, SMEs contribute to about 25% of the GDP but have immense potential for green growth.", bn: "তথ্য: বাংলাদেশে, এসএমই জিডিপির প্রায় ২৫% অবদান রাখে তবে সবুজ প্রবৃদ্ধির জন্য তাদের প্রচুর সম্ভাবনা রয়েছে।" },
+    { en: "Did you know? Composting your organic waste can reduce landfill methane emissions and create valuable fertilizer.", bn: "আপনি কি জানেন? আপনার জৈব বর্জ্য কম্পোস্টিং করলে ল্যান্ডফিলের মিথেন নির্গমন কমাতে পারে এবং মূল্যবান সার তৈরি করতে পারে।" },
+    { en: "Tip: A 'Green Team' of employees can help identify and implement simple, effective sustainability initiatives.", bn: "টিপ: কর্মীদের একটি 'গ্রিন টিম' সহজ, কার্যকর টেকসই উদ্যোগগুলি সনাক্ত করতে এবং বাস্তবায়ন করতে সহায়তা করতে পারে।" },
+    { en: "Fact: Bangladesh Bank offers special low-interest green financing schemes for sustainable projects.", bn: "তথ্য: বাংলাদেশ ব্যাংক টেকসই প্রকল্পের জন্য বিশেষ স্বল্প-সুদে সবুজ অর্থায়ন প্রকল্প অফার করে।" }
 ];
