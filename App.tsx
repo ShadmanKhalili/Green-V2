@@ -2,6 +2,8 @@
 
 
 
+
+
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Language, Indicator, Pillar, ProbingQuestion, ProbingAnswers, LoadingTip } from './types';
 import { PILLARS, SCORE_INTERPRETATIONS, SECTOR_BENCHMARKS, KEY_RESOURCES, PROBING_QUESTIONS, QUESTION_BANK, LOADING_TIPS } from './constants';
@@ -117,10 +119,8 @@ const ProbingQuestionComponent: React.FC<{ question: ProbingQuestion; value: str
                         <input 
                             type="checkbox"
                             value={opt.value}
-                            // FIX: Use Array.isArray to safely check if the value is in the array, preventing runtime errors if `value` is a string.
                             checked={Array.isArray(value) && value.includes(opt.value)}
                             onChange={e => {
-                                // FIX: Use Array.isArray to safely handle the current values, preventing crashes if `value` is not an array.
                                 const currentValues = Array.isArray(value) ? value : [];
                                 const newValues = e.target.checked 
                                     ? [...currentValues, opt.value] 
@@ -419,7 +419,11 @@ const AIRecommendations: React.FC<{ scores: { [key: string]: number }; assessmen
                 .flatMap(p => p.indicators)
                 .filter(indicator => {
                     const score = scores[indicator.id];
-                    return typeof score === 'number' && score >= 0 && score <= 2;
+                    // FIX: Ensure score is treated as a number in comparison.
+                    if (typeof score === 'number') {
+                        return score >= 0 && score <= 2;
+                    }
+                    return false;
                 })
                 .map(indicator => {
                     const answer = indicator.scoringGuide.find(sg => sg.score === scores[indicator.id]);
@@ -460,12 +464,12 @@ Now, provide your expert recommendations in HTML format.`;
             });
 
             if (!response.ok) {
-                // FIX: Add type assertion for the JSON response to handle potential 'unknown' type.
+                // Add type assertion for the JSON response to handle potential 'unknown' type.
                 const errorData = await response.json() as { error?: string };
                 throw new Error(errorData.error || `Request failed with status ${response.status}`);
             }
 
-            // FIX: Add type assertion for the JSON response to handle potential 'unknown' type.
+            // Add type assertion for the JSON response to handle potential 'unknown' type.
             const data = await response.json() as { text: string };
             setRecommendations(data.text);
 
