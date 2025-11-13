@@ -1,9 +1,5 @@
 
 
-
-
-
-
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Language, Indicator, Pillar, ProbingQuestion, ProbingAnswers, LoadingTip } from './types';
 import { PILLARS, SCORE_INTERPRETATIONS, SECTOR_BENCHMARKS, KEY_RESOURCES, PROBING_QUESTIONS, QUESTION_BANK, LOADING_TIPS } from './constants';
@@ -100,8 +96,8 @@ const LanguageSwitcher: React.FC<{ language: Language; setLanguage: (lang: Langu
   </div>
 );
 
-const ProbingQuestionComponent: React.FC<{ question: ProbingQuestion; value: string | string[]; onChange: (id: string, value: any) => void; language: Language; }> = ({ question, value, onChange, language }) => (
-    <div className="mb-6 animate-fade-in-up" style={{ animationDelay: '100ms' }}>
+const ProbingQuestionComponent: React.FC<{ question: ProbingQuestion; value: string | string[]; onChange: (id: string, value: any) => void; language: Language; style?: React.CSSProperties }> = ({ question, value, onChange, language, style }) => (
+    <div className="mb-6 animate-fade-in-up" style={style}>
         <label className="block text-lg font-semibold text-brand-gray-700 mb-2">{question.text[language]}</label>
         {question.type === 'select' && (
             <select 
@@ -127,7 +123,7 @@ const ProbingQuestionComponent: React.FC<{ question: ProbingQuestion; value: str
                                     : currentValues.filter(v => v !== opt.value);
                                 onChange(question.id, newValues);
                             }}
-                            className="h-5 w-5 rounded border-gray-300 text-brand-green focus:ring-brand-green custom-checkbox"
+                            className="h-5 w-5 rounded border-gray-300 text-brand-green focus:ring-brand-green custom-checkbox transition-all"
                         />
                         <span className="text-brand-gray-700">{opt.text[language]}</span>
                     </label>
@@ -152,12 +148,12 @@ const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => 
     }, [answers]);
 
     return (
-        <div className="container mx-auto p-4 md:p-8 animate-fade-in-up">
-            <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-2xl p-8 transform hover:-translate-y-1 transition-transform duration-300">
+        <div className="container mx-auto p-4 md:p-8">
+            <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-2xl p-8 transform hover:-translate-y-1 transition-transform duration-300 animate-fade-in-up">
                 <h2 className="text-4xl font-extrabold text-center text-brand-gray-800 mb-2">{language === 'en' ? 'Tell Us About Your Business' : 'আপনার ব্যবসা সম্পর্কে বলুন'}</h2>
                 <p className="text-center text-brand-gray-700 mb-8">{language === 'en' ? 'Your answers will help us create a personalized assessment.' : 'আপনার উত্তর আমাদের একটি ব্যক্তিগত মূল্যায়ন তৈরি করতে সাহায্য করবে।'}</p>
-                {PROBING_QUESTIONS.map(q => (
-                    <ProbingQuestionComponent key={q.id} question={q} value={answers[q.id] || (q.type === 'checkbox' ? [] : '')} onChange={handleAnswerChange} language={language} />
+                {PROBING_QUESTIONS.map((q, index) => (
+                    <ProbingQuestionComponent key={q.id} question={q} value={answers[q.id] || (q.type === 'checkbox' ? [] : '')} onChange={handleAnswerChange} language={language} style={{ animationDelay: `${100 + index * 50}ms` }} />
                 ))}
                 <button 
                     onClick={() => onComplete(answers)}
@@ -188,7 +184,8 @@ const IndicatorRow: React.FC<{
     language: Language; 
     onReplace: (pillarId: number, questionId: string) => void;
     canReplace: boolean;
-}> = ({ indicator, currentScore, onScoreChange, language, onReplace, canReplace }) => {
+    style?: React.CSSProperties;
+}> = ({ indicator, currentScore, onScoreChange, language, onReplace, canReplace, style }) => {
     const tooltipContent = (
         <div className="text-sm">
             <p className="font-bold mb-2">{language === 'en' ? 'Scoring Guide:' : 'স্কোরিং নির্দেশিকা:'}</p>
@@ -203,11 +200,11 @@ const IndicatorRow: React.FC<{
     );
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center py-4 border-b border-gray-200 last:border-b-0">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center py-4 border-b border-gray-200 last:border-b-0 animate-fade-in-up" style={style}>
             <div className="md:col-span-5 flex items-center gap-2">
                 <p className="font-medium text-brand-gray-700">{indicator.text[language]}</p>
                 <Tooltip text={tooltipContent}>
-                    <i className="fa-solid fa-circle-info text-gray-400 hover:text-brand-teal cursor-pointer"></i>
+                    <i className="fa-solid fa-circle-info text-gray-400 hover:text-brand-teal cursor-pointer transition-colors"></i>
                 </Tooltip>
             </div>
             <div className="md:col-span-7 flex items-center gap-2">
@@ -242,7 +239,8 @@ const PillarCard: React.FC<{
     onReplaceQuestion: (pillarId: number, questionId: string) => void;
     replacementsLeft: number;
     canPillarBeReplaced: boolean;
-}> = ({ pillar, scores, onScoreChange, language, onReplaceQuestion, replacementsLeft, canPillarBeReplaced }) => {
+    style?: React.CSSProperties;
+}> = ({ pillar, scores, onScoreChange, language, onReplaceQuestion, replacementsLeft, canPillarBeReplaced, style }) => {
   const pillarScore = pillar.indicators.reduce((acc, ind) => {
     const score = scores[ind.id] ?? -1;
     return acc + (score > -1 ? score : 0);
@@ -250,7 +248,7 @@ const PillarCard: React.FC<{
   const maxPillarScore = pillar.indicators.reduce((acc, ind) => acc + ind.maxScore, 0);
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6 mb-8 transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 animate-fade-in-up">
+    <div className="bg-white rounded-xl shadow-lg p-6 mb-8 transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 animate-fade-in-up" style={style}>
       <div className="flex justify-between items-start mb-4">
         <div className="flex items-center gap-4">
           <i className={`${PILLAR_ICONS[pillar.id]} text-3xl text-brand-green`}></i>
@@ -265,7 +263,7 @@ const PillarCard: React.FC<{
         </div>
       </div>
       <div className="mt-4">
-        {pillar.indicators.map(indicator => (
+        {pillar.indicators.map((indicator, index) => (
           <IndicatorRow 
             key={indicator.id} 
             indicator={indicator} 
@@ -274,6 +272,7 @@ const PillarCard: React.FC<{
             language={language}
             onReplace={onReplaceQuestion}
             canReplace={replacementsLeft > 0 && canPillarBeReplaced}
+            style={{ animationDelay: `${index * 75}ms` }}
           />
         ))}
       </div>
@@ -417,13 +416,10 @@ const AIRecommendations: React.FC<{ scores: { [key: string]: number }; assessmen
         try {
             const lowScoringAnswers = assessmentData
                 .flatMap(p => p.indicators)
+                // FIX: Refactored filter logic to be more concise and robust.
                 .filter(indicator => {
                     const score = scores[indicator.id];
-                    // FIX: Ensure score is treated as a number in comparison.
-                    if (typeof score === 'number') {
-                        return score >= 0 && score <= 2;
-                    }
-                    return false;
+                    return typeof score === 'number' && score >= 0 && score <= 2;
                 })
                 .map(indicator => {
                     const answer = indicator.scoringGuide.find(sg => sg.score === scores[indicator.id]);
@@ -463,15 +459,16 @@ Now, provide your expert recommendations in HTML format.`;
                 body: JSON.stringify({ prompt }),
             });
 
+            // FIX: Improved safety by reading the body once and handling potential non-JSON or malformed responses.
+            const responseBody = await response.json();
+
             if (!response.ok) {
-                // Add type assertion for the JSON response to handle potential 'unknown' type.
-                const errorData = await response.json() as { error?: string };
+                const errorData = (responseBody || {}) as { error?: string };
                 throw new Error(errorData.error || `Request failed with status ${response.status}`);
             }
 
-            // Add type assertion for the JSON response to handle potential 'unknown' type.
-            const data = await response.json() as { text: string };
-            setRecommendations(data.text);
+            const data = (responseBody || {}) as { text: string };
+            setRecommendations(data.text || '');
 
         } catch (e) {
             console.error(e);
@@ -539,7 +536,7 @@ const AssessmentScreen: React.FC<{
     return (
         <>
             <AssessmentProgress scores={scores} assessmentData={assessmentData} language={language} replacementsLeft={replacementsLeft} />
-            {assessmentData.map(pillar => {
+            {assessmentData.map((pillar, index) => {
                 const totalRelevantQuestionsForPillar = fullRankedQuestions.filter(q => q.pillarId === pillar.id).length;
                 const canPillarBeReplaced = totalRelevantQuestionsForPillar > pillar.indicators.length;
                 return (
@@ -552,6 +549,7 @@ const AssessmentScreen: React.FC<{
                         onReplaceQuestion={onReplaceQuestion}
                         replacementsLeft={replacementsLeft}
                         canPillarBeReplaced={canPillarBeReplaced}
+                        style={{ animationDelay: `${index * 200}ms` }}
                     />
                 )
             })}
@@ -770,13 +768,24 @@ const ResultsPage: React.FC<{
 
 // --- Main App Component ---
 export default function App() {
+  type View = 'probing' | 'assessment' | 'results';
   const [language, setLanguage] = useState<Language>('en');
-  const [view, setView] = useState<'probing' | 'assessment' | 'results'>('probing');
+  const [view, setView] = useState<View>('probing');
+  const [isFadingOut, setIsFadingOut] = useState(false);
   const [assessmentData, setAssessmentData] = useState<Pillar[] | null>(null);
   const [scores, setScores] = useState<{ [key: string]: number }>({});
   const [probingAnswers, setProbingAnswers] = useState<ProbingAnswers>({});
   const [replacementsLeft, setReplacementsLeft] = useState(5);
   const [fullRankedQuestions, setFullRankedQuestions] = useState<Indicator[]>([]);
+
+  const changeView = (newView: View, stateResetter?: () => void) => {
+    setIsFadingOut(true);
+    setTimeout(() => {
+        if (stateResetter) stateResetter();
+        setView(newView);
+        setIsFadingOut(false);
+    }, 400); // Match fade-out animation duration
+  };
 
   const handleProbingComplete = useCallback((answers: ProbingAnswers) => {
     const { fullRankedQuestions: ranked, initialAssessment } = generateCustomAssessmentData(answers);
@@ -786,8 +795,8 @@ export default function App() {
     setScores(getInitialScores(allIndicators));
     setAssessmentData(initialAssessment);
     setProbingAnswers(answers);
-    setView('assessment');
     setReplacementsLeft(5);
+    changeView('assessment');
   }, []);
 
   const handleScoreChange = useCallback((indicatorId: string, score: number) => {
@@ -834,16 +843,18 @@ export default function App() {
 
 
   const handleAssessmentComplete = useCallback(() => {
-    setView('results');
+    changeView('results');
   }, []);
 
   const handleStartOver = useCallback(() => {
-    setView('probing');
-    setAssessmentData(null);
-    setScores({});
-    setProbingAnswers({});
-    setReplacementsLeft(5);
-    setFullRankedQuestions([]);
+    const resetter = () => {
+        setAssessmentData(null);
+        setScores({});
+        setProbingAnswers({});
+        setReplacementsLeft(5);
+        setFullRankedQuestions([]);
+    };
+    changeView('probing', resetter);
   }, []);
 
   const totalScore = useMemo(() => {
@@ -891,7 +902,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-brand-gray-50 text-brand-gray-800 font-sans">
+    <div className="min-h-screen text-brand-gray-800 font-sans">
        <header className="relative text-white p-6 shadow-md h-64 flex items-center justify-center text-center bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1593113633219-bc0741916323?q=80&w=2070&auto=format&fit=crop')" }}>
           <div className="absolute inset-0 bg-brand-green/70"></div>
           <div className="relative container mx-auto">
@@ -901,7 +912,7 @@ export default function App() {
           <LanguageSwitcher language={language} setLanguage={setLanguage} />
       </header>
 
-      <main className="container mx-auto p-4 lg:p-8 -mt-20 relative z-10">
+      <main className={`container mx-auto p-4 lg:p-8 -mt-20 relative z-10 transition-opacity duration-300 ${isFadingOut ? 'animate-fade-out' : ''}`}>
         {renderContent()}
       </main>
       

@@ -1,4 +1,5 @@
 
+
 import { Pillar, ScoreInterpretation, Resource, ProbingQuestion, Indicator, LoadingTip } from './types';
 
 export const PILLARS: Omit<Pillar, 'indicators' | 'notes'>[] = [
@@ -780,5 +781,11 @@ export const LOADING_TIPS: LoadingTip[] = [
     { en: "Fact: In Bangladesh, SMEs contribute to about 25% of the GDP but have immense potential for green growth.", bn: "তথ্য: বাংলাদেশে, এসএমই জিডিপির প্রায় ২৫% অবদান রাখে তবে সবুজ প্রবৃদ্ধির জন্য তাদের প্রচুর সম্ভাবনা রয়েছে।" },
     { en: "Did you know? Composting your organic waste can reduce landfill methane emissions and create valuable fertilizer.", bn: "আপনি কি জানেন? আপনার জৈব বর্জ্য কম্পোস্টিং করলে ল্যান্ডফিলের মিথেন নির্গমন কমাতে পারে এবং মূল্যবান সার তৈরি করতে পারে।" },
     { en: "Tip: A 'Green Team' of employees can help identify and implement simple, effective sustainability initiatives.", bn: "টিপ: কর্মীদের একটি 'গ্রিন টিম' সহজ, কার্যকর টেকসই উদ্যোগগুলি সনাক্ত করতে এবং বাস্তবায়ন করতে সহায়তা করতে পারে।" },
-    { en: "Fact: Bangladesh Bank offers special low-interest green financing schemes for sustainable projects.", bn: "তথ্য: বাংলাদেশ ব্যাংক টেকসই প্রকল্পের জন্য বিশেষ স্বল্প-সুদে সবুজ অর্থায়ন প্রকল্প অফার করে।" }
+    { en: "Fact: Bangladesh Bank offers special low-interest green financing schemes for sustainable projects.", bn: "তথ্য: বাংলাদেশ ব্যাংক টেকসই প্রকল্পের জন্য বিশেষ স্বল্প-সুদে সবুজ অর্থায়ন প্রকল্প অফার করে।" },
+    { en: "Did you know? Jute, the 'Golden Fibre' of Bangladesh, is a highly sustainable material that reduces plastic use.", bn: "আপনি কি জানেন? বাংলাদেশের 'সোনালী আঁশ' পাট একটি অত্যন্ত টেকসই উপাদান যা প্লাস্টিকের ব্যবহার কমায়।" },
+    { en: "Fact: Bangladesh's textile sector is a major water consumer. Technologies like waterless dyeing can save millions of liters annually.", bn: "তথ্য: বাংলাদেশের বস্ত্র খাত একটি প্রধান জল ব্যবহারকারী। জলবিহীন ডাইংয়ের মতো প্রযুক্তি বার্ষিকভাবে লক্ষ লক্ষ লিটার জল সাশ্রয় করতে পারে।" },
+    { en: "Tip: Improving your supply chain's efficiency not only cuts costs but also significantly reduces your carbon footprint from transportation.", bn: "টিপ: আপনার সাপ্লাই চেইনের দক্ষতা উন্নত করা শুধুমাত্র খরচই কমায় না, পরিবহন থেকে আপনার কার্বন ফুটপ্রিন্টও উল্লেখযোগ্যভাবে হ্রাস করে।" },
+    { en: "Fact: Green buildings with better lighting and ventilation have been shown to improve employee productivity and reduce sick days.", bn: "তথ্য: উন্নত আলো এবং বায়ুচলাচল সহ সবুজ ভবনগুলি কর্মীদের উৎপাদনশীলতা উন্নত করতে এবং অসুস্থতার দিন কমাতে দেখানো হয়েছে।" },
+    { en: "Tip: Properly sorting waste for recycling can generate extra income and reduce the burden on local landfills.", bn: "টিপ: পুনর্ব্যবহারের জন্য বর্জ্য সঠিকভাবে বাছাই করা অতিরিক্ত আয় তৈরি করতে পারে এবং স্থানীয় ল্যান্ডফিলের উপর বোঝা কমাতে পারে।" },
+    { en: "Did you know? Aquaculture can be made more sustainable by using solar-powered aerators, improving both yield and energy efficiency.", bn: "আপনি কি জানেন? সৌর-চালিত এয়ারেটর ব্যবহার করে অ্যাকুয়াকালচারকে আরও টেকসই করা যেতে পারে, যা ফলন এবং শক্তি দক্ষতা উভয়ই উন্নত করে।" }
 ];

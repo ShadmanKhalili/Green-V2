@@ -1,5 +1,5 @@
 import type { Handler } from "@netlify/functions";
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -19,7 +19,7 @@ export const handler: Handler = async (event) => {
 
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-    const response: GenerateContentResponse = await ai.models.generateContent({
+    const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
     });
