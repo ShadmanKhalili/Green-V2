@@ -3,8 +3,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Language, Indicator, Pillar, ProbingQuestion, ProbingAnswers, LoadingTip } from './types';
 import { PILLARS, SCORE_INTERPRETATIONS, SECTOR_BENCHMARKS, KEY_RESOURCES, PROBING_QUESTIONS, QUESTION_BANK, LOADING_TIPS } from './constants';
-// Fix: Import `GenerateContentResponse` for proper type safety on the API call.
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 
 declare global {
   interface Window {
@@ -117,9 +115,11 @@ const ProbingQuestionComponent: React.FC<{ question: ProbingQuestion; value: str
                         <input 
                             type="checkbox"
                             value={opt.value}
-                            checked={(value as string[]).includes(opt.value)}
+                            // FIX: Use Array.isArray to safely check if the value is in the array, preventing runtime errors if `value` is a string.
+                            checked={Array.isArray(value) && value.includes(opt.value)}
                             onChange={e => {
-                                const currentValues = (value as string[]) || [];
+                                // FIX: Use Array.isArray to safely handle the current values, preventing crashes if `value` is not an array.
+                                const currentValues = Array.isArray(value) ? value : [];
                                 const newValues = e.target.checked 
                                     ? [...currentValues, opt.value] 
                                     : currentValues.filter(v => v !== opt.value);
@@ -380,13 +380,10 @@ const AIRecommendations: React.FC<{ scores: { [key: string]: number }; assessmen
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    const generateRecommendations = async () => {
+    const generateRecommendations = useCallback(async () => {
         setLoading(true);
         setError('');
         try {
-            // Fix: Initialize GoogleGenAI strictly following the provided guideline.
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
             const lowScoringAnswers = assessmentData
                 .flatMap(p => p.indicators)
                 .filter(indicator => {
@@ -425,25 +422,31 @@ ${lowScoringAnswers}
 
 Now, provide your expert recommendations in HTML format.`;
 
-            // Fix: Explicitly type the response to ensure type safety and prevent inference issues.
-            const response: GenerateContentResponse = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: prompt,
+            const response = await fetch('/.netlify/functions/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt }),
             });
 
-            setRecommendations(response.text);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `Request failed with status ${response.status}`);
+            }
+
+            const data = await response.json();
+            setRecommendations(data.text);
+
         } catch (e) {
             console.error(e);
-            // Fix: Corrected typo in Bengali error message.
             setError(language === 'en' ? 'Failed to generate recommendations. Please try again later.' : 'সুপারিশ তৈরি করতে ব্যর্থ। অনুগ্রহ করে পরে আবার চেষ্টা করুন।');
         } finally {
             setLoading(false);
         }
-    };
+    }, [scores, assessmentData, probingAnswers, language]);
 
     useEffect(() => {
         generateRecommendations();
-    }, [assessmentData, scores, probingAnswers, language]);
+    }, [generateRecommendations]);
 
     return (
         <div className="bg-green-50/50 rounded-xl shadow-lg p-8 my-8 border-t-4 border-brand-teal animate-fade-in-up" style={{animationDelay: '300ms'}}>
