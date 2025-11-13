@@ -3,7 +3,8 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Language, Indicator, Pillar, ProbingQuestion, ProbingAnswers, LoadingTip } from './types';
 import { PILLARS, SCORE_INTERPRETATIONS, SECTOR_BENCHMARKS, KEY_RESOURCES, PROBING_QUESTIONS, QUESTION_BANK, LOADING_TIPS } from './constants';
-import { GoogleGenAI } from "@google/genai";
+// Fix: Import `GenerateContentResponse` for proper type safety on the API call.
+import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 
 declare global {
   interface Window {
@@ -211,8 +212,6 @@ const PillarCard: React.FC<{
     replacementsLeft: number;
     canPillarBeReplaced: boolean;
 }> = ({ pillar, scores, onScoreChange, language, onReplaceQuestion, replacementsLeft, canPillarBeReplaced }) => {
-  // FIX: Operator '>' cannot be applied to types 'unknown' and 'number'.
-  // Coalesce potentially undefined score to -1 to handle state update race conditions and ensure type safety.
   const pillarScore = pillar.indicators.reduce((acc, ind) => {
     const score = scores[ind.id] ?? -1;
     return acc + (score > -1 ? score : 0);
@@ -239,8 +238,6 @@ const PillarCard: React.FC<{
           <IndicatorRow 
             key={indicator.id} 
             indicator={indicator} 
-            // FIX: Operator '>' cannot be applied to types 'unknown' and 'number'.
-            // Pass a default value for score to prevent passing `undefined` to a prop expecting a number.
             currentScore={scores[indicator.id] ?? -1} 
             onScoreChange={onScoreChange} 
             language={language}
@@ -387,7 +384,8 @@ const AIRecommendations: React.FC<{ scores: { [key: string]: number }; assessmen
         setLoading(true);
         setError('');
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+            // Fix: Initialize GoogleGenAI strictly following the provided guideline.
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
             const lowScoringAnswers = assessmentData
                 .flatMap(p => p.indicators)
@@ -410,7 +408,14 @@ const AIRecommendations: React.FC<{ scores: { [key: string]: number }; assessmen
 
             const prompt = `You are an expert consultant for small and medium-sized enterprises (SMEs) in Bangladesh, specializing in green and sustainable business practices.
 
-A business has just completed a sustainability assessment. Based on their profile and low-scoring answers below, provide a set of 3-5 actionable, prioritized recommendations in ${language === 'bn' ? 'Bengali' : 'English'}. For each recommendation, explain why it's important and suggest the first practical step they can take. Focus on low-cost, high-impact suggestions. Format the response as Markdown with clear headings.
+A business has just completed a sustainability assessment. Based on their profile and low-scoring answers below, provide a set of 3-5 actionable, prioritized recommendations in ${language === 'bn' ? 'Bengali' : 'English'}.
+
+For each recommendation:
+1. Provide a clear title.
+2. Explain why it's important for their specific business context.
+3. Suggest the first practical step they can take.
+
+Focus on low-cost, high-impact suggestions. **Format the entire response as clean, semantic HTML.** Use \`<h3>\` for recommendation titles, \`<p>\` for paragraphs, and \`<ul>\` with \`<li>\` for any lists. Do not include \`\`\`html or any markdown syntax.
 
 Business Profile:
 ${businessProfile}
@@ -418,9 +423,10 @@ ${businessProfile}
 Assessment Results (Areas for Improvement):
 ${lowScoringAnswers}
 
-Now, provide your expert recommendations.`;
+Now, provide your expert recommendations in HTML format.`;
 
-            const response = await ai.models.generateContent({
+            // Fix: Explicitly type the response to ensure type safety and prevent inference issues.
+            const response: GenerateContentResponse = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: prompt,
             });
@@ -428,7 +434,8 @@ Now, provide your expert recommendations.`;
             setRecommendations(response.text);
         } catch (e) {
             console.error(e);
-            setError(language === 'en' ? 'Failed to generate recommendations. Please try again later.' : 'সুপারিশ তৈরি করতে ব্যর্থ। অনুগ্রহ করে稍পরে আবার চেষ্টা করুন।');
+            // Fix: Corrected typo in Bengali error message.
+            setError(language === 'en' ? 'Failed to generate recommendations. Please try again later.' : 'সুপারিশ তৈরি করতে ব্যর্থ। অনুগ্রহ করে পরে আবার চেষ্টা করুন।');
         } finally {
             setLoading(false);
         }
@@ -444,7 +451,7 @@ Now, provide your expert recommendations.`;
             {loading && <LoadingAnimation language={language} />}
             {error && <p className="text-red-500">{error}</p>}
             {!loading && !error && (
-                <div className="prose prose-green max-w-none" dangerouslySetInnerHTML={{ __html: recommendations.replace(/\n/g, '<br />') }}></div>
+                <div className="prose prose-green max-w-none" dangerouslySetInnerHTML={{ __html: recommendations }}></div>
             )}
         </div>
     );
