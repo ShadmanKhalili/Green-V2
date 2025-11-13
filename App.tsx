@@ -1,6 +1,6 @@
 
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Language, Indicator, Pillar, ProbingQuestion, ProbingAnswers, LoadingTip } from './types';
 import { PILLARS, SCORE_INTERPRETATIONS, SECTOR_BENCHMARKS, KEY_RESOURCES, PROBING_QUESTIONS, QUESTION_BANK, LOADING_TIPS } from './constants';
 import { GoogleGenAI } from "@google/genai";
@@ -11,6 +11,15 @@ declare global {
     html2canvas: any;
   }
 }
+
+const PILLAR_ICONS: { [key: number]: string } = {
+  1: 'fa-solid fa-leaf', // Energy & Resource Efficiency
+  2: 'fa-solid fa-shield-halved', // Environmental Management
+  3: 'fa-solid fa-hand-holding-dollar', // Green Finance
+  4: 'fa-solid fa-users', // Social Sustainability
+  5: 'fa-solid fa-lightbulb' // Digital & Innovation
+};
+
 
 // --- Helper functions ---
 const getInitialScores = (indicators: Indicator[]) => {
@@ -77,33 +86,33 @@ const generateCustomAssessmentData = (answers: ProbingAnswers) => {
 // --- UI Components ---
 
 const LanguageSwitcher: React.FC<{ language: Language; setLanguage: (lang: Language) => void; }> = ({ language, setLanguage }) => (
-  <div className="absolute top-4 right-4 z-10">
+  <div className="absolute top-1/2 -translate-y-1/2 right-6 z-10">
     <button
       onClick={() => setLanguage(language === 'en' ? 'bn' : 'en')}
-      className="px-4 py-2 bg-white border border-green-700 text-green-700 font-semibold rounded-full shadow-md hover:bg-green-50 transition-colors duration-200 flex items-center gap-2"
+      className="px-4 py-2 bg-white/20 backdrop-blur-sm border border-white/30 text-white font-semibold rounded-full shadow-lg hover:bg-white/30 transition-all duration-300 flex items-center gap-2 transform hover:scale-105"
     >
-      <i className="fa-solid fa-language"></i>
-      {language === 'en' ? 'বাংলা' : 'English'}
+      <i className="fa-solid fa-language text-xl"></i>
+      <span className="hidden md:inline">{language === 'en' ? 'বাংলা' : 'English'}</span>
     </button>
   </div>
 );
 
 const ProbingQuestionComponent: React.FC<{ question: ProbingQuestion; value: string | string[]; onChange: (id: string, value: any) => void; language: Language; }> = ({ question, value, onChange, language }) => (
-    <div className="mb-6">
-        <label className="block text-lg font-semibold text-gray-700 mb-2">{question.text[language]}</label>
+    <div className="mb-6 animate-fade-in-up" style={{ animationDelay: '100ms' }}>
+        <label className="block text-lg font-semibold text-brand-gray-700 mb-2">{question.text[language]}</label>
         {question.type === 'select' && (
             <select 
                 value={value as string} 
                 onChange={e => onChange(question.id, e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-green-500"
+                className="w-full p-3 border border-brand-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-green transition-all"
             >
                 {question.options.map(opt => <option key={opt.value} value={opt.value}>{opt.text[language]}</option>)}
             </select>
         )}
         {question.type === 'checkbox' && (
-            <div className="grid grid-cols-2 gap-2 p-3 border border-gray-200 rounded-lg bg-gray-50">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 border border-brand-gray-200 rounded-lg bg-brand-gray-50">
                 {question.options.map(opt => (
-                    <label key={opt.value} className="flex items-center space-x-2 cursor-pointer">
+                    <label key={opt.value} className="flex items-center space-x-3 cursor-pointer p-2 rounded-md hover:bg-green-100 transition-colors">
                         <input 
                             type="checkbox"
                             value={opt.value}
@@ -115,9 +124,9 @@ const ProbingQuestionComponent: React.FC<{ question: ProbingQuestion; value: str
                                     : currentValues.filter(v => v !== opt.value);
                                 onChange(question.id, newValues);
                             }}
-                            className="h-5 w-5 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                            className="h-5 w-5 rounded border-gray-300 text-brand-green focus:ring-brand-green custom-checkbox"
                         />
-                        <span>{opt.text[language]}</span>
+                        <span className="text-brand-gray-700">{opt.text[language]}</span>
                     </label>
                 ))}
             </div>
@@ -140,18 +149,19 @@ const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => 
     }, [answers]);
 
     return (
-        <div className="container mx-auto p-8">
-            <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-lg p-8">
-                <h2 className="text-3xl font-bold text-center text-gray-800 mb-2">{language === 'en' ? 'Tell us about your business' : 'আপনার ব্যবসা সম্পর্কে আমাদের বলুন'}</h2>
-                <p className="text-center text-gray-600 mb-8">{language === 'en' ? 'Your answers will help us create a personalized assessment.' : 'আপনার উত্তর আমাদের একটি ব্যক্তিগত মূল্যায়ন তৈরি করতে সাহায্য করবে।'}</p>
+        <div className="container mx-auto p-4 md:p-8 animate-fade-in-up">
+            <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-2xl p-8 transform hover:-translate-y-1 transition-transform duration-300">
+                <h2 className="text-4xl font-extrabold text-center text-brand-gray-800 mb-2">{language === 'en' ? 'Tell Us About Your Business' : 'আপনার ব্যবসা সম্পর্কে বলুন'}</h2>
+                <p className="text-center text-brand-gray-700 mb-8">{language === 'en' ? 'Your answers will help us create a personalized assessment.' : 'আপনার উত্তর আমাদের একটি ব্যক্তিগত মূল্যায়ন তৈরি করতে সাহায্য করবে।'}</p>
                 {PROBING_QUESTIONS.map(q => (
                     <ProbingQuestionComponent key={q.id} question={q} value={answers[q.id] || (q.type === 'checkbox' ? [] : '')} onChange={handleAnswerChange} language={language} />
                 ))}
                 <button 
                     onClick={() => onComplete(answers)}
                     disabled={!isComplete}
-                    className="w-full mt-4 py-3 px-6 bg-green-700 text-white font-bold text-lg rounded-lg shadow-md hover:bg-green-800 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-300"
+                    className="w-full mt-4 py-4 px-6 bg-brand-green text-white font-bold text-lg rounded-lg shadow-lg hover:bg-brand-green-dark disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-3"
                 >
+                    <i className="fa-solid fa-wand-magic-sparkles"></i>
                     {language === 'en' ? 'Generate My Assessment' : 'আমার মূল্যায়ন তৈরি করুন'}
                 </button>
             </div>
@@ -167,26 +177,26 @@ const IndicatorRow: React.FC<{
     onReplace: (pillarId: number, questionId: string) => void;
     canReplace: boolean;
 }> = ({ indicator, currentScore, onScoreChange, language, onReplace, canReplace }) => (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center py-4 border-b border-gray-200 last:border-b-0">
-      <div className="md:col-span-1"><p className="font-semibold text-gray-700">{indicator.text[language]}</p></div>
-      <div className="md:col-span-2 flex items-center gap-2">
-        <select value={currentScore} onChange={(e) => onScoreChange(indicator.id, parseInt(e.target.value, 10))} className="flex-grow p-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500">
+    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center py-4 border-b border-gray-200 last:border-b-0">
+      <div className="md:col-span-5"><p className="font-medium text-brand-gray-700">{indicator.text[language]}</p></div>
+      <div className="md:col-span-7 flex items-center gap-2">
+        <select value={currentScore} onChange={(e) => onScoreChange(indicator.id, parseInt(e.target.value, 10))} className="flex-grow p-2 border border-brand-gray-300 rounded-md shadow-sm focus:ring-brand-green focus:border-brand-green transition-all">
           <option value="-1" disabled>{language === 'en' ? 'Select an option...' : 'একটি বিকল্প নির্বাচন করুন...'}</option>
           {indicator.scoringGuide.map(option => (
             <option key={option.score} value={option.score}>{option.score} - {option.description[language]}</option>
           ))}
         </select>
         <div className="w-20 text-center">
-             <span className="font-bold text-lg text-green-700">{currentScore > -1 ? currentScore : '-'}</span>
+             <span className="font-bold text-xl text-brand-green">{currentScore > -1 ? currentScore : '-'}</span>
              <span className="text-gray-500"> / {indicator.maxScore}</span>
         </div>
         <button 
             onClick={() => onReplace(indicator.pillarId, indicator.id)} 
             disabled={!canReplace}
             title={language === 'en' ? 'Replace Question' : 'প্রশ্ন প্রতিস্থাপন করুন'}
-            className="p-2 text-gray-500 hover:text-green-700 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors"
+            className="p-2 text-gray-500 hover:text-brand-green disabled:text-gray-300 disabled:cursor-not-allowed transition-colors transform hover:rotate-45 duration-300"
         >
-            <i className="fa-solid fa-arrows-rotate"></i>
+            <i className="fa-solid fa-arrows-rotate fa-lg"></i>
         </button>
       </div>
     </div>
@@ -201,31 +211,37 @@ const PillarCard: React.FC<{
     replacementsLeft: number;
     canPillarBeReplaced: boolean;
 }> = ({ pillar, scores, onScoreChange, language, onReplaceQuestion, replacementsLeft, canPillarBeReplaced }) => {
-  // FIX: Add a type guard to ensure the score is a number before comparison. This prevents runtime errors with unexpected types.
+  // FIX: Operator '>' cannot be applied to types 'unknown' and 'number'.
+  // Coalesce potentially undefined score to -1 to handle state update race conditions and ensure type safety.
   const pillarScore = pillar.indicators.reduce((acc, ind) => {
-    const score = scores[ind.id];
-    return acc + (typeof score === 'number' && score > -1 ? score : 0);
+    const score = scores[ind.id] ?? -1;
+    return acc + (score > -1 ? score : 0);
   }, 0);
   const maxPillarScore = pillar.indicators.reduce((acc, ind) => acc + ind.maxScore, 0);
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6 mb-8 transition-shadow hover:shadow-xl">
+    <div className="bg-white rounded-xl shadow-lg p-6 mb-8 transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 animate-fade-in-up">
       <div className="flex justify-between items-start mb-4">
-        <div>
-          <h2 className="text-2xl font-bold text-green-800">{pillar.id}. {pillar.title[language]}</h2>
-          <p className="text-gray-500">{language === 'en' ? 'Weight' : 'গুরুত্ব'}: {pillar.points} {language === 'en' ? 'Points' : 'পয়েন্ট'}</p>
+        <div className="flex items-center gap-4">
+          <i className={`${PILLAR_ICONS[pillar.id]} text-3xl text-brand-green`}></i>
+          <div>
+            <h2 className="text-2xl font-bold text-brand-green-dark">{pillar.id}. {pillar.title[language]}</h2>
+            <p className="text-gray-500">{language === 'en' ? 'Weight' : 'গুরুত্ব'}: {pillar.points} {language === 'en' ? 'Points' : 'পয়েন্ট'}</p>
+          </div>
         </div>
         <div className="text-right">
-            <p className="text-3xl font-bold text-green-700">{pillarScore}</p>
+            <p className="text-4xl font-extrabold text-brand-green">{pillarScore}</p>
             <p className="text-gray-500">/ {maxPillarScore}</p>
         </div>
       </div>
-      <div>
+      <div className="mt-4">
         {pillar.indicators.map(indicator => (
           <IndicatorRow 
             key={indicator.id} 
             indicator={indicator} 
-            currentScore={scores[indicator.id]} 
+            // FIX: Operator '>' cannot be applied to types 'unknown' and 'number'.
+            // Pass a default value for score to prevent passing `undefined` to a prop expecting a number.
+            currentScore={scores[indicator.id] ?? -1} 
             onScoreChange={onScoreChange} 
             language={language}
             onReplace={onReplaceQuestion}
@@ -237,18 +253,61 @@ const PillarCard: React.FC<{
   );
 };
 
+const AnimatedNumber = ({ value }: { value: number }) => {
+    const [displayValue, setDisplayValue] = useState(0);
+    const ref = useRef<HTMLSpanElement>(null);
+
+    useEffect(() => {
+        const observer = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting) {
+                let start = 0;
+                const end = value;
+                if (start === end) return;
+                const duration = 1500;
+                const incrementTime = (duration / end);
+                const timer = setInterval(() => {
+                    start += 1;
+                    setDisplayValue(start);
+                    if (start === end) {
+                        clearInterval(timer);
+                    }
+                }, incrementTime);
+                observer.disconnect();
+            }
+        }, { threshold: 0.5 });
+        if(ref.current) observer.observe(ref.current);
+        return () => observer.disconnect();
+    }, [value]);
+
+    return <span ref={ref}>{displayValue}</span>;
+};
+
 const ScoreGauge: React.FC<{ score: number; }> = ({ score }) => {
     const interpretation = SCORE_INTERPRETATIONS.find(interp => score >= interp.minScore)!;
     const circumference = 2 * Math.PI * 52;
-    const offset = circumference - (score / 100) * circumference;
+    const [offset, setOffset] = useState(circumference);
+    
+    useEffect(() => {
+        // Animate stroke on load
+        const progress = score / 100;
+        const finalOffset = circumference - progress * circumference;
+        setTimeout(() => setOffset(finalOffset), 100);
+    }, [score, circumference]);
 
     return (
         <div className="relative flex items-center justify-center w-48 h-48">
             <svg className="transform -rotate-90" width="100%" height="100%" viewBox="0 0 120 120">
                 <circle cx="60" cy="60" r="52" strokeWidth="16" className="text-gray-200" fill="transparent" />
-                <circle cx="60" cy="60" r="52" strokeWidth="16" fill="transparent" className={`${interpretation.textColor} transition-all duration-1000 ease-out`} strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" />
+                <circle cx="60" cy="60" r="52" strokeWidth="16" fill="transparent" className={`${interpretation.textColor}`}
+                    strokeDasharray={circumference}
+                    strokeDashoffset={offset}
+                    strokeLinecap="round"
+                    style={{ transition: 'stroke-dashoffset 1.5s ease-out' }}
+                />
             </svg>
-            <span className="absolute text-5xl font-bold text-gray-700">{score}</span>
+            <div className="absolute text-5xl font-bold text-brand-gray-700">
+                <AnimatedNumber value={score} />
+            </div>
         </div>
     );
 };
@@ -257,23 +316,23 @@ const ResultsSummaryCard: React.FC<{ totalScore: number; language: Language; }> 
   const interpretation = useMemo(() => SCORE_INTERPRETATIONS.find(interp => totalScore >= interp.minScore)!, [totalScore]);
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-8 my-8">
-      <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">{language === 'en' ? 'Your Assessment Result' : 'আপনার মূল্যায়ন ফলাফল'}</h2>
+    <div className="bg-white rounded-xl shadow-lg p-8 my-8 animate-fade-in-up">
+      <h2 className="text-3xl font-bold text-center text-brand-gray-800 mb-6">{language === 'en' ? 'Your Assessment Result' : 'আপনার মূল্যায়ন ফলাফল'}</h2>
       <div className="flex flex-col items-center">
         <ScoreGauge score={totalScore} />
-        <div className={`mt-4 px-4 py-2 rounded-full font-semibold text-white ${interpretation.colorClass}`}>{interpretation.rating.level[language]}</div>
+        <div className={`mt-4 px-6 py-2 rounded-full font-semibold text-white text-lg ${interpretation.colorClass} shadow-md`}>{interpretation.rating.level[language]}</div>
       </div>
       <div className="mt-6 text-center">
-        <p className="text-gray-600">{interpretation.rating.meaning[language]}</p>
-        <div className="mt-4 p-4 bg-gray-100 rounded-lg">
-            <h4 className="font-bold text-gray-800">{language === 'en' ? 'Recommended Actions' : 'প্রস্তাবিত পদক্ষেপ'}</h4>
-            <p className="text-green-700">{interpretation.rating.actions[language]}</p>
+        <p className="text-lg text-brand-gray-700">{interpretation.rating.meaning[language]}</p>
+        <div className="mt-4 p-4 bg-brand-gray-100 rounded-lg border-l-4 border-brand-green">
+            <h4 className="font-bold text-brand-gray-800 flex items-center justify-center gap-2"><i className="fa-solid fa-rocket"></i> {language === 'en' ? 'Recommended Actions' : 'প্রস্তাবিত পদক্ষেপ'}</h4>
+            <p className="text-brand-green-dark font-medium">{interpretation.rating.actions[language]}</p>
         </div>
       </div>
       <div className="mt-8">
-        <h4 className="text-lg font-bold text-gray-800 mb-2">{language === 'en' ? 'Sector Benchmarks' : 'খাত বেঞ্চমার্ক'}</h4>
+        <h4 className="text-lg font-bold text-brand-gray-800 mb-2">{language === 'en' ? 'Sector Benchmarks' : 'খাত বেঞ্চমার্ক'}</h4>
         <div className="space-y-2">
-            {SECTOR_BENCHMARKS.map(bm => (<div key={bm.sector.en} className="flex justify-between items-center text-sm"><span className="text-gray-600">{bm.sector[language]}:</span><span className="font-semibold text-gray-800">{bm.score}/100</span></div>))}
+            {SECTOR_BENCHMARKS.map(bm => (<div key={bm.sector.en} className="flex justify-between items-center text-sm p-2 bg-brand-gray-50 rounded-md"><span className="text-gray-600">{bm.sector[language]}:</span><span className="font-semibold text-gray-800 bg-brand-gray-200 px-2 py-1 rounded">{bm.score}/100</span></div>))}
         </div>
       </div>
     </div>
@@ -281,10 +340,10 @@ const ResultsSummaryCard: React.FC<{ totalScore: number; language: Language; }> 
 };
 
 const InfoSection: React.FC<{ language: Language; }> = ({ language }) => (
-    <div className="bg-white rounded-xl shadow-lg p-8 my-8">
-        <h2 className="text-2xl font-bold text-green-800 mb-4">{language === 'en' ? 'Implementation Guide & Resources' : 'বাস্তবায়ন নির্দেশিকা ও সম্পদ'}</h2>
+    <div className="bg-white rounded-xl shadow-lg p-8 my-8 animate-fade-in-up" style={{animationDelay: '400ms'}}>
+        <h2 className="text-2xl font-bold text-brand-green-dark mb-4 flex items-center gap-3"><i className="fa-solid fa-book-open"></i> {language === 'en' ? 'Implementation Guide & Resources' : 'বাস্তবায়ন নির্দেশিকা ও সম্পদ'}</h2>
         <div className="mb-6">
-            <h3 className="text-xl font-semibold text-gray-700 mb-2">{language === 'en' ? 'Key Resources in Bangladesh' : 'বাংলাদেশে মূল সম্পদ'}</h3>
+            <h3 className="text-xl font-semibold text-brand-gray-700 mb-2">{language === 'en' ? 'Key Resources in Bangladesh' : 'বাংলাদেশে মূল সম্পদ'}</h3>
             <ul className="list-disc list-inside space-y-2">
                 {KEY_RESOURCES.map(res => (<li key={res.name.en} className="text-gray-600"><span className="font-semibold">{res.name[language]}:</span> {res.contact}</li>))}
             </ul>
@@ -292,20 +351,37 @@ const InfoSection: React.FC<{ language: Language; }> = ({ language }) => (
     </div>
 );
 
+const LoadingAnimation: React.FC<{language: Language}> = ({language}) => {
+    const [currentTipIndex, setCurrentTipIndex] = useState(0);
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setCurrentTipIndex(prevIndex => (prevIndex + 1) % LOADING_TIPS.length);
+        }, 3500);
+        return () => clearInterval(timer);
+    }, []);
+
+    return (
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+            <div className="relative h-24 w-24">
+                <div className="absolute inset-0 rounded-full border-4 border-t-transparent border-green-200 animate-spin"></div>
+                <div className="absolute inset-2 rounded-full border-4 border-b-transparent border-teal-300 animate-spin" style={{ animationDirection: 'reverse' }}></div>
+                <div className="absolute inset-0 flex items-center justify-center text-brand-green text-4xl">
+                    <i className="fa-solid fa-seedling"></i>
+                </div>
+            </div>
+            <p className="mt-4 text-gray-600 font-semibold">{language === 'en' ? 'Generating personalized advice...' : 'ব্যক্তিগত পরামর্শ তৈরি করা হচ্ছে...'}</p>
+            <div className="mt-4 text-sm text-brand-gray-700 h-12 flex items-center transition-opacity duration-500">
+                <p key={currentTipIndex} className="animate-fade-in-up">{LOADING_TIPS[currentTipIndex][language]}</p>
+            </div>
+        </div>
+    );
+};
+
 const AIRecommendations: React.FC<{ scores: { [key: string]: number }; assessmentData: Pillar[]; probingAnswers: ProbingAnswers; language: Language; }> = ({ scores, assessmentData, probingAnswers, language }) => {
     const [recommendations, setRecommendations] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [currentTipIndex, setCurrentTipIndex] = useState(0);
-
-    useEffect(() => {
-        if (loading) {
-            const timer = setInterval(() => {
-                setCurrentTipIndex(prevIndex => (prevIndex + 1) % LOADING_TIPS.length);
-            }, 3000); // Change tip every 3 seconds
-            return () => clearInterval(timer);
-        }
-    }, [loading]);
 
     const generateRecommendations = async () => {
         setLoading(true);
@@ -315,7 +391,6 @@ const AIRecommendations: React.FC<{ scores: { [key: string]: number }; assessmen
 
             const lowScoringAnswers = assessmentData
                 .flatMap(p => p.indicators)
-                // FIX: Add a type guard to ensure the score is a number before comparison. This prevents runtime errors with unexpected types.
                 .filter(indicator => {
                     const score = scores[indicator.id];
                     return typeof score === 'number' && score >= 0 && score <= 2;
@@ -335,7 +410,7 @@ const AIRecommendations: React.FC<{ scores: { [key: string]: number }; assessmen
 
             const prompt = `You are an expert consultant for small and medium-sized enterprises (SMEs) in Bangladesh, specializing in green and sustainable business practices.
 
-A business has just completed a sustainability assessment. Based on their profile and low-scoring answers below, provide a set of 3-5 actionable, prioritized recommendations in ${language === 'bn' ? 'Bengali' : 'English'}. For each recommendation, explain why it's important and suggest the first practical step they can take. Focus on low-cost, high-impact suggestions. Format the response as Markdown.
+A business has just completed a sustainability assessment. Based on their profile and low-scoring answers below, provide a set of 3-5 actionable, prioritized recommendations in ${language === 'bn' ? 'Bengali' : 'English'}. For each recommendation, explain why it's important and suggest the first practical step they can take. Focus on low-cost, high-impact suggestions. Format the response as Markdown with clear headings.
 
 Business Profile:
 ${businessProfile}
@@ -364,15 +439,9 @@ Now, provide your expert recommendations.`;
     }, [assessmentData, scores, probingAnswers, language]);
 
     return (
-        <div className="bg-white rounded-xl shadow-lg p-8 my-8">
-            <h2 className="text-2xl font-bold text-green-800 mb-4">{language === 'en' ? 'AI-Generated Recommendations' : 'AI-জেনারেটেড সুপারিশ'}</h2>
-            {loading && (
-                 <div className="flex flex-col items-center justify-center py-8 text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-700"></div>
-                    <p className="mt-4 text-gray-600 font-semibold">{language === 'en' ? 'Generating personalized advice...' : 'ব্যক্তিগত পরামর্শ তৈরি করা হচ্ছে...'}</p>
-                    <p className="mt-4 text-sm text-gray-500 h-10 transition-opacity duration-500">{LOADING_TIPS[currentTipIndex][language]}</p>
-                </div>
-            )}
+        <div className="bg-green-50/50 rounded-xl shadow-lg p-8 my-8 border-t-4 border-brand-teal animate-fade-in-up" style={{animationDelay: '300ms'}}>
+            <h2 className="text-2xl font-bold text-brand-teal mb-4 flex items-center gap-3"><i className="fa-solid fa-robot"></i> {language === 'en' ? 'AI-Generated Recommendations' : 'AI-জেনারেটেড সুপারিশ'}</h2>
+            {loading && <LoadingAnimation language={language} />}
             {error && <p className="text-red-500">{error}</p>}
             {!loading && !error && (
                 <div className="prose prose-green max-w-none" dangerouslySetInnerHTML={{ __html: recommendations.replace(/\n/g, '<br />') }}></div>
@@ -393,14 +462,14 @@ const AssessmentProgress: React.FC<{
 
     return (
         <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-sm shadow-md p-4 mb-8 rounded-lg">
-            <div className="flex justify-between items-center mb-2 text-sm md:text-base">
-                <h3 className="font-bold text-green-800">{language === 'en' ? 'Progress' : 'অগ্রগতি'}</h3>
-                <span className="font-semibold text-gray-700">{answeredQuestions} / {totalQuestions} {language === 'en' ? 'Answered' : 'উত্তর'}</span>
-                <span className="font-semibold text-gray-700">{language === 'en' ? 'Replacements Left:' : 'প্রতিস্থাপন বাকি:'} {replacementsLeft}</span>
+            <div className="flex flex-col sm:flex-row justify-between items-center mb-2 text-sm md:text-base gap-2">
+                <h3 className="font-bold text-brand-green-dark">{language === 'en' ? 'Progress' : 'অগ্রগতি'}</h3>
+                <span className="font-semibold text-brand-gray-700">{answeredQuestions} / {totalQuestions} {language === 'en' ? 'Answered' : 'উত্তর'}</span>
+                <span className="font-semibold text-brand-gray-700">{language === 'en' ? 'Replacements Left:' : 'প্রতিস্থাপন বাকি:'} <span className="bg-yellow-200 text-yellow-800 font-bold px-2 py-1 rounded-full">{replacementsLeft}</span></span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-4">
+            <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
                 <div
-                    className="bg-green-600 h-4 rounded-full transition-all duration-500 ease-out"
+                    className="bg-gradient-to-r from-brand-teal to-brand-green h-4 rounded-full transition-all duration-500 ease-out"
                     style={{ width: `${progressPercentage}%` }}
                 ></div>
             </div>
@@ -410,7 +479,7 @@ const AssessmentProgress: React.FC<{
 
 const AssessmentScreen: React.FC<{
     assessmentData: Pillar[];
-    scores: { [key: string]: number };
+    scores: { [key:string]: number };
     onScoreChange: (id: string, score: number) => void;
     onComplete: () => void;
     language: Language;
@@ -418,6 +487,8 @@ const AssessmentScreen: React.FC<{
     onReplaceQuestion: (pillarId: number, questionId: string) => void;
     fullRankedQuestions: Indicator[];
 }> = ({ assessmentData, scores, onScoreChange, onComplete, language, replacementsLeft, onReplaceQuestion, fullRankedQuestions }) => {
+    const isComplete = useMemo(() => Object.values(scores).every(score => score > -1), [scores]);
+    
     return (
         <>
             <AssessmentProgress scores={scores} assessmentData={assessmentData} language={language} replacementsLeft={replacementsLeft} />
@@ -439,8 +510,10 @@ const AssessmentScreen: React.FC<{
             })}
             <button
                 onClick={onComplete}
-                className="w-full mt-4 py-3 px-6 bg-green-700 text-white font-bold text-lg rounded-lg shadow-md hover:bg-green-800 transition-colors duration-300"
+                disabled={!isComplete}
+                className="w-full mt-4 py-4 px-6 bg-brand-green text-white font-bold text-lg rounded-lg shadow-lg hover:bg-brand-green-dark disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-3"
             >
+                <i className="fa-solid fa-chart-pie"></i>
                 {language === 'en' ? 'Finish & See Results' : 'শেষ করুন এবং ফলাফল দেখুন'}
             </button>
         </>
@@ -453,14 +526,11 @@ interface PillarScoreData {
     maxScore: number;
     weight: number;
     weightedScore: number;
+    pillarId: number;
 }
 
 const pillarColors = [
-  'bg-blue-500',
-  'bg-purple-500',
-  'bg-pink-500',
-  'bg-orange-500',
-  'bg-indigo-500',
+  'bg-blue-500', 'bg-purple-500', 'bg-pink-500', 'bg-orange-500', 'bg-indigo-500',
 ];
 
 const PillarScoresChart: React.FC<{ pillarScores: PillarScoreData[]; language: Language; }> = ({ pillarScores, language }) => {
@@ -474,18 +544,21 @@ const PillarScoresChart: React.FC<{ pillarScores: PillarScoreData[]; language: L
     }, [pillarScores]);
 
     return (
-        <div className="bg-white rounded-xl shadow-lg p-8 my-8">
-            <h3 className="text-2xl font-bold text-gray-800 mb-6 text-center">
-                {language === 'en' ? 'Performance by Pillar' : 'স্তম্ভ অনুযায়ী কর্মক্ষমতা'}
+        <div className="bg-white rounded-xl shadow-lg p-8 my-8 animate-fade-in-up" style={{ animationDelay: '200ms' }}>
+            <h3 className="text-2xl font-bold text-brand-gray-800 mb-6 text-center flex items-center justify-center gap-3">
+                <i className="fa-solid fa-bars-progress"></i> {language === 'en' ? 'Performance by Pillar' : 'স্তম্ভ অনুযায়ী কর্মক্ষমতা'}
             </h3>
             <div className="space-y-4">
                 {pillarScores.map((pillar, index) => (
                     <div key={pillar.title}>
                         <div className="flex justify-between items-center mb-1">
-                            <span className="font-semibold text-gray-700">{pillar.title}</span>
-                            <span className="font-bold text-gray-800">{pillar.weightedScore} / {pillar.weight}</span>
+                            <span className="font-semibold text-brand-gray-700 flex items-center gap-2">
+                                <i className={`${PILLAR_ICONS[pillar.pillarId]} text-brand-teal`}></i>
+                                {pillar.title}
+                            </span>
+                            <span className="font-bold text-brand-gray-800">{pillar.weightedScore} / {pillar.weight}</span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-6 overflow-hidden">
+                        <div className="w-full bg-brand-gray-200 rounded-full h-6 overflow-hidden">
                             <div
                                 className={`${pillarColors[index % pillarColors.length]} h-6 rounded-full text-white flex items-center justify-center text-sm font-bold transition-all duration-1000 ease-out`}
                                 style={{ width: `${animatedScores[index] || 0}%` }}
@@ -514,7 +587,6 @@ const ResultsPage: React.FC<{
 
     const pillarScores = useMemo(() => {
         return assessmentData.map(pillar => {
-            // FIX: Add a type guard to ensure the score is a number before comparison. This resolves a TypeScript error.
             const pillarScore = pillar.indicators.reduce((acc, ind) => {
                 const score = scores[ind.id];
                 return acc + (typeof score === 'number' && score > -1 ? score : 0);
@@ -527,6 +599,7 @@ const ResultsPage: React.FC<{
                 maxScore: maxPillarScore,
                 weight: pillar.points,
                 weightedScore: Math.round(weightedScore),
+                pillarId: pillar.id,
             };
         });
     }, [assessmentData, scores, language]);
@@ -572,7 +645,6 @@ const ResultsPage: React.FC<{
         setIsExporting(true);
 
         setTimeout(() => {
-            // FIX: Use window.html2canvas as it's defined on the window object.
             window.html2canvas(input, { scale: 2, useCORS: true, logging: false }).then(canvas => {
                 const imgData = canvas.toDataURL('image/png');
                 const pdf = new jsPDF('p', 'mm', 'a4');
@@ -612,18 +684,18 @@ const ResultsPage: React.FC<{
             </div>
 
             {!isExporting && (
-                <div className="mt-8 space-y-4">
+                <div className="mt-8 space-y-4 animate-fade-in-up" style={{animationDelay: '500ms'}}>
                      <div className="flex flex-col md:flex-row gap-4">
                         <button
                             onClick={handleExportPDF}
-                            className="w-full py-3 px-6 bg-red-600 text-white font-bold text-lg rounded-lg shadow-md hover:bg-red-700 transition-colors duration-300 flex items-center justify-center gap-2"
+                            className="w-full py-3 px-6 bg-red-600 text-white font-bold text-lg rounded-lg shadow-md hover:bg-red-700 transition-all duration-300 flex items-center justify-center gap-2 transform hover:scale-105"
                         >
                             <i className="fa-solid fa-file-pdf"></i>
                             {language === 'en' ? 'Export PDF' : 'পিডিএফ এক্সপোর্ট'}
                         </button>
                         <button
                             onClick={handleExportCSV}
-                            className="w-full py-3 px-6 bg-green-600 text-white font-bold text-lg rounded-lg shadow-md hover:bg-green-700 transition-colors duration-300 flex items-center justify-center gap-2"
+                            className="w-full py-3 px-6 bg-brand-green text-white font-bold text-lg rounded-lg shadow-md hover:bg-brand-green-dark transition-all duration-300 flex items-center justify-center gap-2 transform hover:scale-105"
                         >
                             <i className="fa-solid fa-file-csv"></i>
                             {language === 'en' ? 'Export CSV' : 'সিএসভি এক্সপোর্ট'}
@@ -631,11 +703,17 @@ const ResultsPage: React.FC<{
                     </div>
                     <button
                         onClick={onStartOver}
-                        className="w-full py-3 px-6 bg-gray-600 text-white font-bold text-lg rounded-lg shadow-md hover:bg-gray-700 transition-colors duration-300 flex items-center justify-center gap-2"
+                        className="w-full py-3 px-6 bg-brand-gray-700 text-white font-bold text-lg rounded-lg shadow-md hover:bg-brand-gray-800 transition-all duration-300 flex items-center justify-center gap-2 transform hover:scale-105"
                     >
                         <i className="fa-solid fa-rotate-right"></i>
                         {language === 'en' ? 'Start Over' : 'আবার শুরু করুন'}
                     </button>
+                </div>
+            )}
+            {isExporting && (
+                <div className="text-center p-8 text-brand-gray-700 font-semibold">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-green mx-auto"></div>
+                    <p className="mt-4">{language === 'en' ? 'Generating PDF...' : 'পিডিএফ তৈরি করা হচ্ছে...'}</p>
                 </div>
             )}
         </div>
@@ -766,21 +844,22 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800 font-sans">
-      <header className="bg-green-700 text-white p-6 shadow-md relative">
-        <div className="container mx-auto text-center">
-            <h1 className="text-4xl font-extrabold">{language === 'en' ? 'Green Business Assessment Tool' : 'সবুজ ব্যবসায়িক মূল্যায়ন সরঞ্জাম'}</h1>
-            <p className="text-lg mt-2 opacity-90">{language === 'en' ? 'For Bangladeshi SMEs' : 'বাংলাদেশের ছোট ও মাঝারি শিল্পের জন্য'}</p>
-        </div>
-        <LanguageSwitcher language={language} setLanguage={setLanguage} />
+    <div className="min-h-screen bg-brand-gray-50 text-brand-gray-800 font-sans">
+       <header className="relative text-white p-6 shadow-md h-64 flex items-center justify-center text-center bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1593113633219-bc0741916323?q=80&w=2070&auto=format&fit=crop')" }}>
+          <div className="absolute inset-0 bg-brand-green/70"></div>
+          <div className="relative container mx-auto">
+              <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-shadow-lg">{language === 'en' ? 'Green Business Assessment Tool' : 'সবুজ ব্যবসায়িক মূল্যায়ন সরঞ্জাম'}</h1>
+              <p className="text-lg md:text-xl mt-2 opacity-90 text-shadow-md">{language === 'en' ? 'For Bangladeshi SMEs' : 'বাংলাদেশের ছোট ও মাঝারি শিল্পের জন্য'}</p>
+          </div>
+          <LanguageSwitcher language={language} setLanguage={setLanguage} />
       </header>
 
-      <main className="container mx-auto p-4 lg:p-8">
+      <main className="container mx-auto p-4 lg:p-8 -mt-20 relative z-10">
         {renderContent()}
       </main>
       
-      <footer className="bg-green-800 text-white text-center p-4 mt-8">
-          <p>&copy; 2024 Sustainable Business Research Bangladesh. Version 3.1</p>
+      <footer className="bg-brand-gray-800 text-white text-center p-4 mt-8">
+          <p>&copy; 2024 Sustainable Business Research Bangladesh. Version 4.0</p>
       </footer>
     </div>
   );
