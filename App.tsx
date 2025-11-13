@@ -8,6 +8,9 @@ declare global {
   interface Window {
     jspdf: any;
     html2canvas: any;
+    DOMPurify: {
+      sanitize: (dirty: string) => string;
+    };
   }
 }
 
@@ -241,9 +244,10 @@ const PillarCard: React.FC<{
     canPillarBeReplaced: boolean;
     style?: React.CSSProperties;
 }> = ({ pillar, scores, onScoreChange, language, onReplaceQuestion, replacementsLeft, canPillarBeReplaced, style }) => {
+  // FIX: Explicitly check if the score is a number before comparison to avoid potential errors.
   const pillarScore = pillar.indicators.reduce((acc, ind) => {
-    const score = scores[ind.id] ?? -1;
-    return acc + (score > -1 ? score : 0);
+    const score = scores[ind.id];
+    return acc + (typeof score === 'number' && score > -1 ? score : 0);
   }, 0);
   const maxPillarScore = pillar.indicators.reduce((acc, ind) => acc + ind.maxScore, 0);
 
@@ -416,14 +420,15 @@ const AIRecommendations: React.FC<{ scores: { [key: string]: number }; assessmen
         try {
             const lowScoringAnswers = assessmentData
                 .flatMap(p => p.indicators)
-                // FIX: Refactored filter logic to be more concise and robust.
                 .filter(indicator => {
                     const score = scores[indicator.id];
                     return typeof score === 'number' && score >= 0 && score <= 2;
                 })
                 .map(indicator => {
-                    const answer = indicator.scoringGuide.find(sg => sg.score === scores[indicator.id]);
-                    return `- Question: ${indicator.text.en}\n  - Answer (Score ${scores[indicator.id]}): ${answer?.description.en}`;
+                    // FIX: Use a local variable for the score to ensure type safety and improve readability.
+                    const score = scores[indicator.id];
+                    const answer = indicator.scoringGuide.find(sg => sg.score === score);
+                    return `- Question: ${indicator.text.en}\n  - Answer (Score ${score}): ${answer?.description.en}`;
                 })
                 .join('\n');
             
@@ -459,7 +464,6 @@ Now, provide your expert recommendations in HTML format.`;
                 body: JSON.stringify({ prompt }),
             });
 
-            // FIX: Improved safety by reading the body once and handling potential non-JSON or malformed responses.
             const responseBody = await response.json();
 
             if (!response.ok) {
@@ -488,7 +492,7 @@ Now, provide your expert recommendations in HTML format.`;
             {loading && <LoadingAnimation language={language} />}
             {error && <p className="text-red-500">{error}</p>}
             {!loading && !error && (
-                <div className="prose prose-green max-w-none" dangerouslySetInnerHTML={{ __html: recommendations }}></div>
+                <div className="prose prose-green max-w-none" dangerouslySetInnerHTML={{ __html: window.DOMPurify.sanitize(recommendations) }}></div>
             )}
         </div>
     );
