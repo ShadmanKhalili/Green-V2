@@ -1,6 +1,5 @@
 
-
-import { Pillar, ScoreInterpretation, Resource, ProbingQuestion, Indicator, LoadingTip } from './types';
+import { Pillar, ScoreInterpretation, Resource, ProbingQuestion, Indicator } from './types';
 
 export const PILLARS: Omit<Pillar, 'indicators' | 'notes'>[] = [
   { id: 1, title: { en: 'Energy & Resource Efficiency', bn: 'শক্তি ও সম্পদ দক্ষতা' }, points: 30 },
@@ -10,68 +9,339 @@ export const PILLARS: Omit<Pillar, 'indicators' | 'notes'>[] = [
   { id: 5, title: { en: 'Digital & Innovation', bn: 'ডিজিটাল ও উদ্ভাবন' }, points: 10 },
 ];
 
+export const SCORING_OPTIONS = [
+    { score: 0, text: { en: '0 - No practice / harmful practice / unmanaged risk', bn: '০ - কোনো অনুশীলন নেই / ক্ষতিকর অনুশীলন / অব্যবস্থাপিত ঝুঁকি' } },
+    { score: 1, text: { en: '1 - Aware but not yet practicing', bn: '১ - সচেতন কিন্তু এখনও অনুশীলন করা হচ্ছে না' } },
+    { score: 2, text: { en: '2 - Practicing sometimes or informally', bn: '২ - মাঝে মাঝে বা অনানুষ্ঠানিকভাবে অনুশীলন করা হচ্ছে' } },
+    { score: 3, text: { en: '3 - Practicing regularly', bn: '৩ - নিয়মিত অনুশীলন করা হচ্ছে' } },
+    { score: 4, text: { en: '4 - Practicing regularly with proof/records', bn: '৪ - প্রমাণ/রেকর্ড সহ নিয়মিত অনুশীলন করা হচ্ছে' } },
+    { score: -1, text: { en: 'N/A - Not applicable', bn: 'প্রযোজ্য নয়' } }
+];
+
 export const PROBING_QUESTIONS: ProbingQuestion[] = [
-    { id: 'PQ1', type: 'select', text: { en: 'What is your primary business activity?', bn: 'আপনার প্রধান ব্যবসায়িক কার্যকলাপ কি?' }, options: [
+    { id: 'P1', backendTag: 'business_name', type: 'text', text: { en: 'What is the name of your business?', bn: 'আপনার ব্যবসার নাম কি?' } },
+    { id: 'P2', backendTag: 'location_division_district', type: 'select', text: { en: 'Where is your business mainly located?', bn: 'আপনার ব্যবসা প্রধানত কোথায় অবস্থিত?' }, options: [
         { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
-        { value: 'Manufacturing (Factory-based)', text: { en: 'Manufacturing (Factory-based)', bn: 'উৎপাদন (কারখানা-ভিত্তিক)' } },
-        { value: 'Manufacturing (Workshop-based)', text: { en: 'Manufacturing (Workshop-based)', bn: 'উৎপাদন (ورشਾপ-ভিত্তিক)' } },
-        { value: 'Trading/Wholesale', text: { en: 'Trading/Wholesale', bn: 'ট্রেডিং/পাইকারি' } },
-        { value: 'Retail', text: { en: 'Retail', bn: 'খুচরা' } },
-        { value: 'Service (Office-based)', text: { en: 'Service (Office-based)', bn: 'পরিষেবা (অফিস-ভিত্তিক)' } },
-        { value: 'Service (Field-based)', text: { en: 'Service (Field-based)', bn: 'পরিষেবা (ক্ষেত্র-ভিত্তিক)' } },
-        { value: 'Agriculture/Processing', text: { en: 'Agriculture/Processing', bn: 'কৃষি/প্রক্রিয়াকরণ' } },
+        { value: 'Dhaka', text: { en: 'Dhaka', bn: 'ঢাকা' } },
+        { value: 'Chattogram', text: { en: 'Chattogram', bn: 'চট্টগ্রাম' } },
+        { value: 'Rajshahi', text: { en: 'Rajshahi', bn: 'রাজশাহী' } },
+        { value: 'Khulna', text: { en: 'Khulna', bn: 'খুলনা' } },
+        { value: 'Barishal', text: { en: 'Barishal', bn: 'বরিশাল' } },
+        { value: 'Sylhet', text: { en: 'Sylhet', bn: 'সিলেট' } },
+        { value: 'Rangpur', text: { en: 'Rangpur', bn: 'রংপুর' } },
+        { value: 'Mymensingh', text: { en: 'Mymensingh', bn: 'ময়মনসিংহ' } },
+        { value: 'Other district', text: { en: 'Other district', bn: 'অন্যান্য জেলা' } },
+        { value: 'Mobile / no fixed business location', text: { en: 'Mobile / no fixed business location', bn: 'মোবাইল / কোনো নির্দিষ্ট অবস্থান নেই' } }
     ]},
-    { id: 'PQ2', type: 'select', text: { en: 'Where is your business located?', bn: 'আপনার ব্যবসা কোথায় অবস্থিত?' }, options: [
+    { id: 'P3', backendTag: 'business_premise_type', type: 'select', text: { en: 'Which option best describes where your business operates?', bn: 'কোন বিকল্পটি আপনার ব্যবসার অবস্থান সবচেয়ে ভালোভাবে বর্ণনা করে?' }, options: [
         { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
-        { value: 'Dhaka City', text: { en: 'Dhaka City', bn: 'ঢাকা শহর' } },
-        { value: 'Chattogram City', text: { en: 'Chattogram City', bn: 'চট্টগ্রাম শহর' } },
-        { value: 'Other City Corporation', text: { en: 'Other City Corporation', bn: 'অন্যান্য সিটি কর্পোরেশন' } },
-        { value: 'District Town', text: { en: 'District Town', bn: 'জেলা শহর' } },
-        { value: 'Rural Area', text: { en: 'Rural Area', bn: 'গ্রামাঞ্চল' } },
+        { value: 'Home-based business', text: { en: 'Home-based business', bn: 'বাড়ি-ভিত্তিক ব্যবসা' } },
+        { value: 'Farm or agricultural land', text: { en: 'Farm or agricultural land', bn: 'খামার বা কৃষি জমি' } },
+        { value: 'Own shop, factory, or workshop', text: { en: 'Own shop, factory, or workshop', bn: 'নিজস্ব দোকান, কারখানা বা ওয়ার্কশপ' } },
+        { value: 'Rented shop, factory, or workshop', text: { en: 'Rented shop, factory, or workshop', bn: 'ভাড়া করা দোকান, কারখানা বা ওয়ার্কশপ' } },
+        { value: 'Shared market space or bazaar stall', text: { en: 'Shared market space or bazaar stall', bn: 'শেয়ার করা মার্কেট স্পেস বা বাজারের দোকান' } },
+        { value: 'Mobile business / vehicle-based', text: { en: 'Mobile business / vehicle-based', bn: 'মোবাইল ব্যবসা / যানবাহন-ভিত্তিক' } },
+        { value: 'Online business with physical stock/storage', text: { en: 'Online business with physical stock/storage', bn: 'ভৌত স্টক/স্টোরেজ সহ অনলাইন ব্যবসা' } },
+        { value: 'Other', text: { en: 'Other', bn: 'অন্যান্য' } }
     ]},
-    { id: 'PQ3', type: 'select', text: { en: 'Who are your main customers?', bn: 'আপনার প্রধান গ্রাহক কারা?' }, options: [
+    { id: 'P4', backendTag: 'registration_status', type: 'select', text: { en: 'What is the current legal or registration status of your business?', bn: 'আপনার ব্যবসার বর্তমান আইনি বা নিবন্ধন স্থিতি কী?' }, options: [
         { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
-        { value: '100% Domestic', text: { en: '100% Domestic', bn: '১০০% দেশীয়' } },
-        { value: 'Mostly Domestic (>70%)', text: { en: 'Mostly Domestic (>70%)', bn: 'বেশিরভাগই দেশীয় (>۷০%)' } },
-        { value: 'Mixed (30-70% Export)', text: { en: 'Mixed (30-70% Export)', bn: 'মিশ্র (৩০-۷০% রপ্তানি)' } },
-        { value: 'Mostly Export (>70%)', text: { en: 'Mostly Export (>70%)', bn: 'বেশিরভাগই রপ্তানি (>۷০%)' } },
-        { value: '100% Export', text: { en: '100% Export', bn: '১০০% রপ্তানি' } },
+        { value: 'I have a trade licence', text: { en: 'I have a trade licence', bn: 'আমার একটি ট্রেড লাইসেন্স আছে' } },
+        { value: 'I have company registration', text: { en: 'I have company registration', bn: 'আমার কোম্পানি নিবন্ধন আছে' } },
+        { value: 'I have cooperative/group registration', text: { en: 'I have cooperative/group registration', bn: 'আমার সমবায়/গ্রুপ নিবন্ধন আছে' } },
+        { value: 'I have agricultural/farm-related registration', text: { en: 'I have agricultural/farm-related registration', bn: 'আমার কৃষি/খামার সম্পর্কিত নিবন্ধন আছে' } },
+        { value: 'I have started the process but it is not complete', text: { en: 'I have started the process but it is not complete', bn: 'আমি প্রক্রিয়া শুরু করেছি কিন্তু এটি সম্পূর্ণ হয়নি' } },
+        { value: 'I do not have registration yet', text: { en: 'I do not have registration yet', bn: 'আমার এখনও নিবন্ধন নেই' } },
+        { value: 'I am not sure', text: { en: 'I am not sure', bn: 'আমি নিশ্চিত নই' } }
     ]},
-    { id: 'PQ4', type: 'select', text: { en: 'What is your annual turnover?', bn: 'আপনার বার্ষিক টার্নওভার কত?' }, options: [
+    { id: 'P5', backendTag: 'worker_count_band', type: 'select', text: { en: 'How many people usually work in your business, including owner, family workers, temporary workers, and paid workers?', bn: 'মালিক, পরিবারের কর্মী, অস্থায়ী কর্মী এবং বেতনভোগী কর্মী সহ সাধারণত আপনার ব্যবসায় কতজন লোক কাজ করে?' }, options: [
         { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
-        { value: '< Tk 10 lakh', text: { en: '< Tk 10 lakh', bn: '< ১০ লক্ষ টাকা' } },
-        { value: 'Tk 10-50 lakh', text: { en: 'Tk 10-50 lakh', bn: '১০-৫০ লক্ষ টাকা' } },
-        { value: 'Tk 50 lakh - 2 crore', text: { en: 'Tk 50 lakh - 2 crore', bn: '৫০ লক্ষ - ২ কোটি টাকা' } },
-        { value: 'Tk 2-5 crore', text: { en: 'Tk 2-5 crore', bn: '২-৫ কোটি টাকা' } },
-        { value: '> Tk 5 crore', text: { en: '> Tk 5 crore', bn: '> ৫ কোটি টাকা' } },
+        { value: '1 person', text: { en: '1 person', bn: '১ জন' } },
+        { value: '2-5 people', text: { en: '2-5 people', bn: '২-৫ জন' } },
+        { value: '6-10 people', text: { en: '6-10 people', bn: '৬-১০ জন' } },
+        { value: '11-30 people', text: { en: '11-30 people', bn: '১১-৩০ জন' } },
+        { value: '31-100 people', text: { en: '31-100 people', bn: '৩১-১০০ জন' } },
+        { value: 'More than 100 people', text: { en: 'More than 100 people', bn: '১০০ জনের বেশি' } },
+        { value: 'Seasonal / changes a lot', text: { en: 'Seasonal / changes a lot', bn: 'মৌসুমী / অনেক পরিবর্তন হয়' } }
     ]},
-    { id: 'PQ5', type: 'checkbox', text: { en: 'Which resources are most critical to your operations? (Select all that apply)', bn: 'আপনার কার্যক্রমের জন্য কোন সম্পদগুলি সবচেয়ে গুরুত্বপূর্ণ? (প্রযোজ্য সব নির্বাচন করুন)' }, options: [
-        { value: 'Electricity', text: { en: 'Electricity', bn: 'বিদ্যুৎ' } },
-        { value: 'Natural Gas', text: { en: 'Natural Gas', bn: 'প্রাকৃতিক গ্যাস' } },
-        { value: 'Diesel/Fuel', text: { en: 'Diesel/Fuel', bn: 'ডিজেল/জ্বালানি' } },
-        { value: 'Water (Municipal)', text: { en: 'Water (Municipal)', bn: 'জল (পৌরসভা)' } },
-        { value: 'Groundwater', text: { en: 'Groundwater', bn: 'ভূগর্ভস্থ জল' } },
-        { value: 'Chemicals/Raw Materials', text: { en: 'Chemicals/Raw Materials', bn: 'রাসায়নিক/কাঁচামাল' } },
-        { value: 'Packaging Materials', text: { en: 'Packaging Materials', bn: 'প্যাকেজিং সামগ্রী' } },
-    ]},
-    { id: 'PQ6', type: 'checkbox', text: { en: 'Have you heard of or interacted with any of these? (Select all that apply)', bn: 'আপনি কি এগুলির কোনোটির কথা শুনেছেন বা যোগাযোগ করেছেন? (প্রযোজ্য সব নির্বাচন করুন)' }, options: [
-        { value: 'Bangladesh Bank Green Financing', text: { en: 'Bangladesh Bank Green Financing', bn: 'বাংলাদেশ ব্যাংক গ্রিন ফাইন্যান্সিং' } },
-        { value: 'SME Foundation', text: { en: 'SME Foundation', bn: 'এসএমই ফাউন্ডেশন' } },
-        { value: 'Department of Environment (DoE)', text: { en: 'Department of Environment (DoE)', bn: 'পরিবেশ অধিদপ্তর (DoE)' } },
-        { value: 'BGMEA Sustainability Program', text: { en: 'BGMEA Sustainability Program', bn: 'বিজিএমইএ সাসটেইনেবিলিটি প্রোগ্রাম' } },
-        { value: 'ISO 14001', text: { en: 'ISO 14001', bn: 'আইএসও ১৪০০১' } },
-        { value: 'None of the above', text: { en: 'None of the above', bn: 'উপরের কোনটিই নয়' } },
-    ]},
-    { id: 'PQ7', type: 'select', text: { en: 'What is your biggest sustainability challenge?', bn: 'আপনার সবচেয়ে বড় টেকসই চ্যালেঞ্জ কি?' }, options: [
+    { id: 'P6', backendTag: 'seasonality_profile', type: 'select', text: { en: 'During your busiest season or month, does your business become much larger than usual?', bn: 'আপনার ব্যস্ততম মৌসুমে বা মাসে, আপনার ব্যবসা কি স্বাভাবিকের চেয়ে অনেক বড় হয়ে যায়?' }, dependsOn: (a) => a['P5'] === 'Seasonal / changes a lot', options: [
         { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
-        { value: 'High energy costs', text: { en: 'High energy costs', bn: 'উচ্চ শক্তি খরচ' } },
-        { value: 'Waste disposal', text: { en: 'Waste disposal', bn: 'বর্জ্য নিষ্কাশন' } },
-        { value: 'Water scarcity', text: { en: 'Water scarcity', bn: 'জল সংকট' } },
-        { value: 'Chemical management', text: { en: 'Chemical management', bn: 'রাসায়নিক ব্যবস্থাপনা' } },
-        { value: 'Meeting buyer requirements', text: { en: 'Meeting buyer requirements', bn: 'ক্রেতার প্রয়োজনীয়তা পূরণ' } },
-        { value: 'Access to green finance', text: { en: 'Access to green finance', bn: 'সবুজ অর্থায়নে প্রবেশাধিকার' } },
-        { value: 'Lack of knowledge', text: { en: 'Lack of knowledge', bn: 'জ্ঞানের অভাব' } },
-        { value: 'Not a priority currently', text: { en: 'Not a priority currently', bn: 'বর্তমানে অগ্রাধিকার নয়' } },
+        { value: 'Yes, number of workers increases', text: { en: 'Yes, number of workers increases', bn: 'হ্যাঁ, শ্রমিকের সংখ্যা বৃদ্ধি পায়' } },
+        { value: 'Yes, production or sales increases', text: { en: 'Yes, production or sales increases', bn: 'হ্যাঁ, উৎপাদন বা বিক্রয় বৃদ্ধি পায়' } },
+        { value: 'Yes, water/fuel/electricity use increases', text: { en: 'Yes, water/fuel/electricity use increases', bn: 'হ্যাঁ, জল/জ্বালানি/বিদ্যুৎ ব্যবহার বৃদ্ধি পায়' } },
+        { value: 'Yes, waste increases', text: { en: 'Yes, waste increases', bn: 'হ্যাঁ, বর্জ্য বৃদ্ধি পায়' } },
+        { value: 'No major change', text: { en: 'No major change', bn: 'বড় কোনো পরিবর্তন নেই' } },
+        { value: 'Not applicable', text: { en: 'Not applicable', bn: 'প্রযোজ্য নয়' } }
+    ]},
+    { id: 'P7', backendTag: 'monthly_turnover_band', type: 'select', text: { en: 'What is the approximate monthly sales or turnover of your business?', bn: 'আপনার ব্যবসার আনুমানিক মাসিক বিক্রয় বা টার্নওভার কত?' }, options: [
+        { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
+        { value: 'Less than BDT 50,000', text: { en: 'Less than BDT 50,000', bn: '৫০,০০০ টাকার কম' } },
+        { value: 'BDT 50,000-200,000', text: { en: 'BDT 50,000-200,000', bn: '৫০,০০০ - ২০০,০০০ টাকা' } },
+        { value: 'BDT 200,001-500,000', text: { en: 'BDT 200,001-500,000', bn: '২০০,০০১ - ৫০০,০০০ টাকা' } },
+        { value: 'BDT 500,001-1,000,000', text: { en: 'BDT 500,001-1,000,000', bn: '৫০০,০০১ - ১,০০০,০০০ টাকা' } },
+        { value: 'More than BDT 1,000,000', text: { en: 'More than BDT 1,000,000', bn: '১,০০০,০০০ টাকার বেশি' } },
+        { value: 'I prefer not to say', text: { en: 'I prefer not to say', bn: 'আমি বলতে চাই গঠন' } },
+        { value: 'I do not know exactly', text: { en: 'I do not know exactly', bn: 'আমি ঠিক জানি না' } }
+    ]},
+    { id: 'P8', backendTag: 'primary_sector', type: 'select', text: { en: 'Which broad category best describes your business?', bn: 'কোন বিস্তৃত বিভাগটি আপনার ব্যবসাকে সবচেয়ে ভালোভাবে বর্ণনা করে?' }, options: [
+        { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
+        { value: 'Agriculture / crop production / nursery', text: { en: 'Agriculture / crop production / nursery', bn: 'কৃষি / ফসল উৎপাদন / নার্সারি' } },
+        { value: 'Livestock / dairy / poultry / fisheries', text: { en: 'Livestock / dairy / poultry / fisheries', bn: 'গবাদি পশু / ডেইরি / পোল্ট্রি / মৎস্য' } },
+        { value: 'Manufacturing or processing', text: { en: 'Manufacturing or processing', bn: 'উৎপাদন বা প্রক্রিয়াকরণ' } },
+        { value: 'Retail or wholesale trading', text: { en: 'Retail or wholesale trading', bn: 'খুচরা বা পাইকারি ট্রেডিং' } },
+        { value: 'Food service / restaurant / catering / hotel', text: { en: 'Food service / restaurant / catering / hotel', bn: 'খাদ্য পরিষেবা / রেস্টুরেন্ট / ক্যাটারিং / হোটেল' } },
+        { value: 'Transport / logistics / delivery / cold chain', text: { en: 'Transport / logistics / delivery / cold chain', bn: 'পরিবহন / লজিস্টিকস / ডেলিভারি / কোল্ড চেইন' } },
+        { value: 'Repair, workshop, light engineering, metal work', text: { en: 'Repair, workshop, light engineering, metal work', bn: 'মেরামত, ওয়ার্কশপ, হালকা প্রকৌশল, ধাতব কাজ' } },
+        { value: 'Textile, garments, tailoring, dyeing, washing', text: { en: 'Textile, garments, tailoring, dyeing, washing', bn: 'টেক্সটাইল, পোশাক, দর্জি, ডাইং, ওয়াশিং' } },
+        { value: 'Plastic, packaging, printing, recycling', text: { en: 'Plastic, packaging, printing, recycling', bn: 'প্লাস্টিক, প্যাকেজিং, প্রিন্টিং, রিসাইক্লিং' } },
+        { value: 'Other service business', text: { en: 'Other service business', bn: 'অন্যান্য পরিষেবা ব্যবসা' } },
+        { value: 'Other', text: { en: 'Other', bn: 'অন্যান্য' } }
+    ]},
+    { id: 'P9', backendTag: 'sub_sector_activity', type: 'select', text: { en: 'What is your main business activity?', bn: 'আপনার প্রধান ব্যবসায়িক কার্যকলাপ কি?' }, dependsOn: (a) => a['P8'] !== undefined && a['P8'] !== 'default', options: [
+        { value: 'default', text: { en: 'Select based on your sector above...', bn: 'উপরের আপনার খাতের উপর ভিত্তি করে নির্বাচন করুন...' } },
+        { value: 'Agriculture', text: { en: 'Rice/Vegetable/Crop Farming', bn: 'ধান/সবজি/ফসল চাষ' } },
+        { value: 'Livestock', text: { en: 'Dairy/Poultry/Fish Farming', bn: 'ডেইরি/পোল্ট্রি/মাছ চাষ' } },
+        { value: 'Manufacturing', text: { en: 'Food Processing/Manufacturing', bn: 'খাদ্য প্রক্রিয়াকরণ/উৎপাদন' } },
+        { value: 'Retail', text: { en: 'Retail/Grocery/Pharmacy', bn: 'খুচরা/মুদি/ফার্মেসি' } }
+    ]},
+    { id: 'P10', backendTag: 'mixed_business_model', type: 'select', text: { en: 'Does your business do more than one type of activity?', bn: 'আপনার ব্যবসা কি একাধিক ধরনের কাজ করে?' }, dependsOn: (a) => a['P8'] !== undefined && a['P8'] !== 'default', options: [
+        { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
+        { value: 'No, only one main activity', text: { en: 'No, only one main activity', bn: 'না, কেবল একটি প্রধান কাজ' } },
+        { value: 'Yes, production and sales', text: { en: 'Yes, production and sales', bn: 'হ্যাঁ, উৎপাদন ও বিক্রি' } },
+        { value: 'Yes, farming and processing', text: { en: 'Yes, farming and processing', bn: 'হ্যাঁ, কৃষি কাজ ও প্রক্রিয়াজাতকরণ' } },
+        { value: 'Yes, trading and transport/delivery', text: { en: 'Yes, trading and transport/delivery', bn: 'হ্যাঁ, ট্রেডিং এবং পরিবহন/ডেলিভারি' } },
+        { value: 'Yes, food preparation and retail sales', text: { en: 'Yes, food preparation and retail sales', bn: 'হ্যাঁ, খাবার তৈরি এবং খুচরা বিক্রি' } },
+        { value: 'Yes, repair and sales of parts/materials', text: { en: 'Yes, repair and sales of parts/materials', bn: 'হ্যাঁ, মেরামত এবং যন্ত্রাংশ/উপকরণ বিক্রি' } },
+        { value: 'Yes, other combination', text: { en: 'Yes, other combination', bn: 'হ্যাঁ, অন্যান্য মিশ্রণ' } }
+    ]},
+    { id: 'P11', backendTag: 'energy_sources', type: 'checkbox', text: { en: 'Which types of energy or fuel does your business use? (Select all that apply)', bn: 'আপনার ব্যবসা কোন ধরণের জ্বালানি ব্যবহার করে? (প্রযোজ্য সব নির্বাচন করুন)' }, options: [
+        { value: 'Grid electricity', text: { en: 'Grid electricity', bn: 'গ্রিড বিদ্যুৎ' } },
+        { value: 'Solar electricity', text: { en: 'Solar electricity', bn: 'সৌর বিদ্যুৎ' } },
+        { value: 'Diesel', text: { en: 'Diesel', bn: 'ডিজেল' } },
+        { value: 'Petrol/octane', text: { en: 'Petrol/octane', bn: 'পেট্রোল/অকটেন' } },
+        { value: 'CNG', text: { en: 'CNG', bn: 'সিএনজি' } },
+        { value: 'LPG cylinder', text: { en: 'LPG cylinder', bn: 'এলপিজি সিলিন্ডার' } },
+        { value: 'Natural gas line', text: { en: 'Natural gas line', bn: 'প্রাকৃতিক গ্যাস লাইন' } },
+        { value: 'Firewood', text: { en: 'Firewood', bn: 'জ্বালানি কাঠ' } },
+        { value: 'Coal', text: { en: 'Coal', bn: 'কয়লা' } },
+        { value: 'Rice husk / biomass', text: { en: 'Rice husk / biomass', bn: 'চালের তুষ / বায়োমাস' } },
+        { value: 'Battery / IPS / generator', text: { en: 'Battery / IPS / generator', bn: 'ব্যাটারি / আইপিএস / জেনারেটর' } },
+        { value: 'No significant energy use', text: { en: 'No significant energy use', bn: 'কোনো উল্লেখযোগ্য শক্তির ব্যবহার নেই' } },
+        { value: 'I do not know', text: { en: 'I do not know', bn: 'আমি জানি না' } }
+    ]},
+    { id: 'P12', backendTag: 'equipment_intensity', type: 'select', text: { en: 'Does your business use machines, motors, boilers, pumps, ovens, dryers, compressors, refrigerators, freezers, sewing machines, grinders, or vehicles?', bn: 'আপনার ব্যবসা কি মেশিন, মোটর, বয়লার, পাম্প, ওভেন, ড্রায়ার, কম্প্রেসার, রেফ্রিজারেটর, ফ্রিজার, সেলাই মেশিন, গ্রাইন্ডার বা যানবাহন ব্যবহার করে?' }, dependsOn: (a) => {
+        if (!a['P8']) return false;
+        const p8 = a['P8'] as string;
+        const p11 = Array.isArray(a['P11']) ? a['P11'] : [];
+        return p8.includes('Manufacturing') || p8.includes('Textile') || p8.includes('Repair') || p11.length > 0;
+    }, options: [
+        { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
+        { value: 'Yes, many', text: { en: 'Yes, many', bn: 'হ্যাঁ, অনেকগুলো' } },
+        { value: 'Yes, a few', text: { en: 'Yes, a few', bn: 'হ্যাঁ, কয়েকটি' } },
+        { value: 'Only small equipment', text: { en: 'Only small equipment', bn: 'শুধুমাত্র ছোট সরঞ্জাম' } },
+        { value: 'No', text: { en: 'No', bn: 'না' } },
+        { value: 'I do not know', text: { en: 'I do not know', bn: 'আমি জানি না' } }
+    ]},
+    { id: 'P13', backendTag: 'water_use_intensity', type: 'select', text: { en: 'Does your business use water for production, washing, cleaning, irrigation, cooling, cooking, livestock, dyeing, or processing?', bn: 'আপনার ব্যবসা কি উৎপাদন, ধোয়া, পরিষ্কার, সেচ, শীতলকরণ, রান্না, গবাদি পশু, ডাইং বা প্রক্রিয়াকরণের জন্য জল ব্যবহার করে?' }, options: [
+        { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
+        { value: 'Yes, large amount', text: { en: 'Yes, large amount', bn: 'হ্যাঁ, প্রচুর পরিমাণে' } },
+        { value: 'Yes, moderate amount', text: { en: 'Yes, moderate amount', bn: 'হ্যাঁ, মাঝারি পরিমাণে' } },
+        { value: 'Yes, small amount', text: { en: 'Yes, small amount', bn: 'হ্যাঁ, সামান্য পরিমাণে' } },
+        { value: 'No significant water use', text: { en: 'No significant water use', bn: 'কোনো উল্লেখযোগ্য জল ব্যবহার নেই' } },
+        { value: 'I do not know', text: { en: 'I do not know', bn: 'আমি জানি না' } }
+    ]},
+    { id: 'P14', backendTag: 'wastewater_disposal_route', type: 'select', text: { en: 'Where does used water or wastewater from your business usually go?', bn: 'আপনার ব্যবসা থেকে ব্যবহৃত জল বা বর্জ্য জল সাধারণত কোথায় যায়?' }, dependsOn: (a) => ['Yes, large amount', 'Yes, moderate amount', 'Yes, small amount'].includes(a['P13'] as string), options: [
+        { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
+        { value: 'No wastewater is produced', text: { en: 'No wastewater is produced', bn: 'কোনো বর্জ্য জল উৎপন্ন হয় না' } },
+        { value: 'Drain', text: { en: 'Drain', bn: 'ড্রেন' } },
+        { value: 'Pond/canal/river/water body', text: { en: 'Pond/canal/river/water body', bn: 'পুকুর/খাল/নদী/জলাশয়' } },
+        { value: 'Open land', text: { en: 'Open land', bn: 'খোলা জমি' } },
+        { value: 'Septic tank/soak pit', text: { en: 'Septic tank/soak pit', bn: 'সেপটিক ট্যাংক/সোক পিট' } },
+        { value: 'Reused for another purpose', text: { en: 'Reused for another purpose', bn: 'অন্য উদ্দেশ্যে পুনরায় ব্যবহৃত' } },
+        { value: 'Treated before disposal', text: { en: 'Treated before disposal', bn: 'নিষ্পত্তির আগে শোধন করা হয়' } },
+        { value: 'I do not know', text: { en: 'I do not know', bn: 'আমি জানি না' } }
+    ]},
+    { id: 'P15', backendTag: 'waste_types', type: 'checkbox', text: { en: 'What types of waste does your business produce? (Select all that apply)', bn: 'আপনার ব্যবসা কী ধরণের বর্জ্য তৈরি করে? (প্রযোজ্য সব নির্বাচন করুন)' }, options: [
+        { value: 'Food waste', text: { en: 'Food waste', bn: 'খাদ্য বর্জ্য' } },
+        { value: 'Crop residue', text: { en: 'Crop residue', bn: 'ফসলের অবশিষ্টাংশ' } },
+        { value: 'Manure / dung / poultry litter / fish waste', text: { en: 'Manure / dung / poultry litter / fish waste', bn: 'সার / গোবর / পোল্ট্রি লিটার / মাছের বর্জ্য' } },
+        { value: 'Plastic packaging', text: { en: 'Plastic packaging', bn: 'প্লাস্টিকের প্যাকেজিং' } },
+        { value: 'Paper/cardboard', text: { en: 'Paper/cardboard', bn: 'কাগজ/কার্ডবোর্ড' } },
+        { value: 'Fabric waste', text: { en: 'Fabric waste', bn: 'কাপড়ের বর্জ্য' } },
+        { value: 'Metal scrap', text: { en: 'Metal scrap', bn: 'ধাতব বর্জ্য' } },
+        { value: 'Wood waste', text: { en: 'Wood waste', bn: 'কাঠের বর্জ্য' } },
+        { value: 'Rice husk / bran / ash', text: { en: 'Rice husk / bran / ash', bn: 'চালের তুষ / কুঁড়া / ছাই' } },
+        { value: 'Used oil / grease', text: { en: 'Used oil / grease', bn: 'ব্যবহৃত তেল / গ্রীস' } },
+        { value: 'Chemical containers', text: { en: 'Chemical containers', bn: 'রাসায়নিক পাত্র' } },
+        { value: 'Pesticide/fertilizer packets or bottles', text: { en: 'Pesticide/fertilizer packets or bottles', bn: 'কীটনাশক/সারের প্যাকেট বা বোতল' } },
+        { value: 'Expired/spoiled products', text: { en: 'Expired/spoiled products', bn: 'মেয়াদোত্তীর্ণ/নষ্ট পণ্য' } },
+        { value: 'Medical/veterinary waste', text: { en: 'Medical/veterinary waste', bn: 'মেডিকেল/ভেটেরিনারি বর্জ্য' } },
+        { value: 'Wastewater sludge', text: { en: 'Wastewater sludge', bn: 'বর্জ্য জলের কাদা' } },
+        { value: 'General mixed waste', text: { en: 'General mixed waste', bn: 'সাধারণ মিশ্র বর্জ্য' } },
+        { value: 'Very little waste', text: { en: 'Very little waste', bn: 'খুব সামান্য বর্জ্য' } },
+        { value: 'I do not know', text: { en: 'I do not know', bn: 'আমি জানি না' } }
+    ]},
+    { id: 'P16', backendTag: 'waste_handling_method', type: 'select', text: { en: 'How is most of your waste currently handled?', bn: 'বর্তমানে আপনার বেশিরভাগ বর্জ্য কীভাবে পরিচালনা করা হয়?' }, dependsOn: (a) => {
+        const waste = a['P15'] as string[] || [];
+        return waste.length > 0 && !waste.includes('Very little waste') && !waste.includes('I do not know');
+    }, options: [
+        { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
+        { value: 'Collected by municipal/local waste collector', text: { en: 'Collected by municipal/local waste collector', bn: 'পৌরসভা/স্থানীয় বর্জ্য সংগ্রহকারী দ্বারা সংগৃহীত' } },
+        { value: 'Sold to recycler or scrap buyer', text: { en: 'Sold to recycler or scrap buyer', bn: 'রিসাইক্লার বা ভাঙারি ক্রেতার কাছে বিক্রি করা হয়' } },
+        { value: 'Reused in the business', text: { en: 'Reused in the business', bn: 'ব্যাবসায় আবার ব্যবহার করা হয়' } },
+        { value: 'Given to farmers/animal feed/composting', text: { en: 'Given to farmers/animal feed/composting', bn: 'কৃষক/পশুখাদ্য/কম্পোস্টিং-এর জন্য দেওয়া হয়' } },
+        { value: 'Burned', text: { en: 'Burned', bn: 'পোড়ানো হয়' } },
+        { value: 'Thrown in open place', text: { en: 'Thrown in open place', bn: 'খোলা জায়গায় ফেলা হয়' } },
+        { value: 'Disposed in drain/canal/pond/river', text: { en: 'Disposed in drain/canal/pond/river', bn: 'ড্রেন/খাল/পুকুর/নদীতে ফেলা হয়' } },
+        { value: 'Mixed with household waste', text: { en: 'Mixed with household waste', bn: 'গৃহস্থালির বর্জ্যের সাথে মেশানো হয়' } },
+        { value: 'Other', text: { en: 'Other', bn: 'অন্যান্য' } },
+        { value: 'I do not know', text: { en: 'I do not know', bn: 'আমি জানি না' } }
+    ]},
+    { id: 'P17', backendTag: 'local_pollution_nuisance', type: 'select', text: { en: 'Does your business create smoke, dust, bad smell, chemical smell, noise, heat, wastewater, or flies/mosquitoes that may affect workers, neighbours, customers, animals, crops, drains, ponds, or canals?', bn: 'আপনার ব্যবসা কি ধোঁয়া, ধুলো, দুর্গন্ধ, রাসায়নিক গন্ধ, শব্দ, তাপ, বর্জ্য জল বা মাছি/মশা তৈরি করে যা সম্ভাব্য কর্মী, প্রতিবেশী, বা পরিবেশের ক্ষতি করতে পারে?' }, options: [
+        { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
+        { value: 'Yes, often', text: { en: 'Yes, often', bn: 'হ্যাঁ, প্রায়ই' } },
+        { value: 'Sometimes', text: { en: 'Sometimes', bn: 'মাঝেমধ্যে' } },
+        { value: 'Rarely', text: { en: 'Rarely', bn: 'খুব কমই' } },
+        { value: 'No', text: { en: 'No', bn: 'না' } },
+        { value: 'I am not sure', text: { en: 'I am not sure', bn: 'আমি নিশ্চিত নই' } }
+    ]},
+    { id: 'P18', backendTag: 'chemical_input_types', type: 'checkbox', text: { en: 'Does your business use any of the following materials or chemicals?', bn: 'আপনার ব্যবসা কি নিম্নলিখিত কোনো উপকরণ বা রাসায়নিক ব্যবহার করে?' }, options: [
+        { value: 'Fertilizer', text: { en: 'Fertilizer', bn: 'সার' } },
+        { value: 'Pesticide / insecticide / herbicide', text: { en: 'Pesticide / insecticide / herbicide', bn: 'কীটনাশক / আগাছানাশক' } },
+        { value: 'Veterinary medicine', text: { en: 'Veterinary medicine', bn: 'ভেটেরিনারি ওষুধ' } },
+        { value: 'Detergent or cleaning chemical', text: { en: 'Detergent or cleaning chemical', bn: 'ডিটারজেন্ট বা পরিষ্কার করার রাসায়নিক' } },
+        { value: 'Dye / colour / printing chemical', text: { en: 'Dye / colour / printing chemical', bn: 'রং / ছাপার রাসায়নিক' } },
+        { value: 'Solvent / thinner / paint', text: { en: 'Solvent / thinner / paint', bn: 'দ্রাবক / থিনার / রং' } },
+        { value: 'Lubricating oil / engine oil / grease', text: { en: 'Lubricating oil / engine oil / grease', bn: 'লুব্রিকেটিং তেল / ইঞ্জিন তেল / গ্রিজ' } },
+        { value: 'Acid / alkali / bleaching agent', text: { en: 'Acid / alkali / bleaching agent', bn: 'এসিড / ক্ষার / ব্লিচিং এজেন্ট' } },
+        { value: 'Plastic resin or packaging material', text: { en: 'Plastic resin or packaging material', bn: 'প্লাস্টিক রেজিন বা প্যাকেজিং সামগ্রী' } },
+        { value: 'Fuel stored on site', text: { en: 'Fuel stored on site', bn: 'সাইটে রাখা জ্বালানি' } },
+        { value: 'None of these', text: { en: 'None of these', bn: 'এগুলোর কোনটি নয়' } },
+        { value: 'I do not know', text: { en: 'I do not know', bn: 'আমি জানি না' } }
+    ]},
+    { id: 'P19', backendTag: 'safe_storage_initial', type: 'select', text: { en: 'Are chemicals, fuel, oil, pesticides, fertilizer, or cleaning products stored separately and safely?', bn: 'রাসায়নিক উপাদান, জ্বালানি, তেল, কীটনাশক, সার বা পরিষ্কার করার পণ্য কি আলাদাভাবে এবং নিরাপদে সংরক্ষণ করা হয়?' }, dependsOn: (a) => {
+        const mats = a['P18'] as string[] || [];
+        return mats.length > 0 && !mats.includes('None of these') && !mats.includes('I do not know');
+    }, options: [
+        { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
+        { value: 'Yes, always', text: { en: 'Yes, always', bn: 'হ্যাঁ, সর্বদা' } },
+        { value: 'Sometimes', text: { en: 'Sometimes', bn: 'মাঝে মাঝে' } },
+        { value: 'No', text: { en: 'No', bn: 'না' } },
+        { value: 'Not applicable', text: { en: 'Not applicable', bn: 'প্রযোজ্য নয়' } },
+        { value: 'I do not know', text: { en: 'I do not know', bn: 'আমি জানি না' } }
+    ]},
+    { id: 'P20', backendTag: 'recordkeeping_types', type: 'checkbox', text: { en: 'Do you keep any records related to your business operations? (Select all that apply)', bn: 'আপনি কি ব্যবসার কোনো রেকর্ড বা হিসাব রাখেন? (প্রযোজ্য সব নির্বাচন করুন)' }, options: [
+        { value: 'Sales records', text: { en: 'Sales records', bn: 'বিক্রয় রেকর্ড' } },
+        { value: 'Purchase records', text: { en: 'Purchase records', bn: 'ক্রয় রেকর্ড' } },
+        { value: 'Electricity bills', text: { en: 'Electricity bills', bn: 'বিদ্যুৎ বিল' } },
+        { value: 'Fuel cost records', text: { en: 'Fuel cost records', bn: 'জ্বালানি খরচের রেকর্ড' } },
+        { value: 'Water bills or water-use records', text: { en: 'Water bills or water-use records', bn: 'জলের বিল বা পানি ব্যবহারের রেকর্ড' } },
+        { value: 'Production records', text: { en: 'Production records', bn: 'উৎপাদন রেকর্ড' } },
+        { value: 'Waste sale/recycling records', text: { en: 'Waste sale/recycling records', bn: 'বর্জ্য বিক্রয়/রিসাইক্লিং রেকর্ড' } },
+        { value: 'Fertilizer/pesticide records', text: { en: 'Fertilizer/pesticide records', bn: 'সার/কীটনাশক রেকর্ড' } },
+        { value: 'Feed/medicine records', text: { en: 'Feed/medicine records', bn: 'খাদ্য/ওষুধ রেকর্ড' } },
+        { value: 'Equipment repair/maintenance records', text: { en: 'Equipment repair/maintenance records', bn: 'সরঞ্জাম মেরামত/রক্ষণাবেক্ষণের রেকর্ড' } },
+        { value: 'Worker attendance/payment records', text: { en: 'Worker attendance/payment records', bn: 'কর্মীর উপস্থিতি/পেমেন্ট রেকর্ড' } },
+        { value: 'Photos of improvements', text: { en: 'Photos of improvements', bn: 'উন্নতির ছবি' } },
+        { value: 'No records', text: { en: 'No records', bn: 'কোনো রেকর্ড নেই' } },
+        { value: 'I keep records in memory only', text: { en: 'I keep records in memory only', bn: 'আমি কেবল স্মৃতিতে রেকর্ড রাখি' } }
+    ]},
+    { id: 'P21', backendTag: 'green_decision_maker', type: 'select', text: { en: 'Who usually makes decisions about reducing waste, saving electricity/fuel, saving water, or improving the workplace?', bn: 'বর্জ্য কমানো, বিদ্যুৎ/জ্বালানি বাঁচানো ইত্যাদির বিষয়ে সাধারণত কে সিদ্ধান্ত নেন?' }, options: [
+        { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
+        { value: 'Owner only', text: { en: 'Owner only', bn: 'শুধুমাত্র মালিক' } },
+        { value: 'Owner and family members', text: { en: 'Owner and family members', bn: 'মালিক ও পরিবারের সদস্যরা' } },
+        { value: 'Manager/supervisor', text: { en: 'Manager/supervisor', bn: 'ম্যানেজার/তত্ত্বাবধায়ক' } },
+        { value: 'Workers together', text: { en: 'Workers together', bn: 'কর্মীরা একসঙ্গে' } },
+        { value: 'Landlord/market committee', text: { en: 'Landlord/market committee', bn: 'বাড়িওয়ালা/মার্কেট কমিটি' } },
+        { value: 'No one specifically', text: { en: 'No one specifically', bn: 'নির্দিষ্ট কেউ নেই' } },
+        { value: 'Not applicable', text: { en: 'Not applicable', bn: 'প্রযোজ্য নয়' } }
+    ]},
+    { id: 'P22', backendTag: 'recent_green_improvement', type: 'select', text: { en: 'Have you made any improvement in the last 12 months to reduce cost, waste, pollution, water use, fuel use, or electricity use?', bn: 'খরচ, বর্জ্য, দূষণ, জলের ব্যবহার, জ্বালানি ব্যবহার বা বিদ্যুতের ব্যবহার কমাতে গত ১২ মাসে আপনি কি কোনো উন্নতি করেছেন?' }, dependsOn: (a) => {
+        const p21 = a['P21'] as string;
+        return !!p21 && p21 !== 'default' && p21 !== 'Not applicable' && p21 !== 'No one specifically';
+    }, options: [
+        { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
+        { value: 'Yes, several improvements', text: { en: 'Yes, several improvements', bn: 'হ্যাঁ, বেশ কয়েকটি উন্নতি করেছি' } },
+        { value: 'Yes, one or two improvements', text: { en: 'Yes, one or two improvements', bn: 'হ্যাঁ, এক বা দুটি উন্নতি করেছি' } },
+        { value: 'Planned but not yet done', text: { en: 'Planned but not yet done', bn: 'পরিকল্পনা করেছি, কিন্তু এখনও করা হয়নি' } },
+        { value: 'No', text: { en: 'No', bn: 'না' } },
+        { value: 'I do not know', text: { en: 'I do not know', bn: 'আমি জানি না' } }
+    ]},
+    { id: 'P23', backendTag: 'finance_interest_timeline', type: 'select', text: { en: 'Are you interested in receiving finance, loan, grant, subsidy, or supplier credit for improving your business?', bn: 'আপনি কি আপনার ব্যবসার উন্নতির জন্য অর্থায়ন, ঋণ, অনুদান, ভর্তুকি নিতে আগ্রহী?' }, options: [
+        { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
+        { value: 'Yes, within 6 months', text: { en: 'Yes, within 6 months', bn: 'হ্যাঁ, ৬ মাসের মধ্যে' } },
+        { value: 'Yes, within 1 year', text: { en: 'Yes, within 1 year', bn: 'হ্যাঁ, ১ বছরের মধ্যে' } },
+        { value: 'Maybe later', text: { en: 'Maybe later', bn: 'হয়তো পরে' } },
+        { value: 'No, not now', text: { en: 'No, not now', bn: 'না, এখন নয়' } },
+        { value: 'I do not know', text: { en: 'I do not know', bn: 'আমি জানি না' } }
+    ]},
+    { id: 'P24', backendTag: 'green_finance_interest_area', type: 'checkbox', text: { en: 'What type of green improvement would you be most interested in financing? (Select up to three)', bn: 'কোন ধরণের সবুজ উন্নতির জন্য আপনি অর্থায়ন পেতে সবচেয়ে বেশি আগ্রহী? (সর্বোচ্চ তিনটি নির্বাচন করুন)' }, dependsOn: (a) => {
+        const p23 = a['P23'] as string;
+        return p23 === 'Yes, within 6 months' || p23 === 'Yes, within 1 year' || p23 === 'Maybe later';
+    }, options: [
+        { value: 'Solar energy', text: { en: 'Solar energy', bn: 'সৌর শক্তি' } },
+        { value: 'Efficient machinery or motors', text: { en: 'Efficient machinery or motors', bn: 'দক্ষ যন্ত্রপাতি বা মোটর' } },
+        { value: 'Efficient lights/fans/refrigerators', text: { en: 'Efficient lights/fans/refrigerators', bn: 'দক্ষ লাইট/ফ্যান/রেফ্রিজারেটর' } },
+        { value: 'Cleaner cooking, boiler, dryer, or heating system', text: { en: 'Cleaner cooking, boiler, dryer, or heating system', bn: 'পরিচ্ছন্ন রান্না, বয়লার, ড্রায়ার বা হিটিং ব্যবস্থা' } },
+        { value: 'Waste management or composting', text: { en: 'Waste management or composting', bn: 'বর্জ্য ব্যবস্থাপনা বা কম্পোস্টিং' } },
+        { value: 'Manure management / biogas', text: { en: 'Manure management / biogas', bn: 'সার ব্যবস্থাপনা / বায়োগ্যাস' } },
+        { value: 'Water-saving system', text: { en: 'Water-saving system', bn: 'জলের সাশ্রয় ব্যবস্থা' } },
+        { value: 'Wastewater treatment or safe drainage', text: { en: 'Wastewater treatment or safe drainage', bn: 'বর্জ্য জল শোধন বা নিরাপদ নিষ্কাশন' } },
+        { value: 'Safe chemical storage', text: { en: 'Safe chemical storage', bn: 'নিরাপদ রাসায়নিক সংরক্ষণ' } },
+        { value: 'Cleaner transport or fuel saving', text: { en: 'Cleaner transport or fuel saving', bn: 'পরিচ্ছন্ন পরিবহন বা জ্বালানি সাশ্রয়' } },
+        { value: 'Building improvement, ventilation, insulation, cooling', text: { en: 'Building improvement, ventilation, insulation, cooling', bn: 'ভবন উন্নতি, বায়ুচলাচল, নিরোধক, শীতলীকরণ' } },
+        { value: 'Certification or audit support', text: { en: 'Certification or audit support', bn: 'সাক্ষ্যপত্র বা অডিট সহায়তা' } },
+        { value: 'I am not sure', text: { en: 'I am not sure', bn: 'আমি নিশ্চিত নই' } }
+    ]},
+    { id: 'P25', backendTag: 'available_evidence_types', type: 'checkbox', text: { en: 'If a bank, NGO, donor project, or buyer asked for proof of green practices, what could you show?', bn: 'যদি কোনো ব্যাংক, এনজিও, দাতা প্রকল্প, বা ক্রেতা সবুজ অনুশীলনের প্রমাণ চায়, তবে আপনি কী দেখাতে পারবেন?' }, dependsOn: (a) => {
+        const p23 = a['P23'] as string;
+        return p23 === 'Yes, within 6 months' || p23 === 'Yes, within 1 year' || p23 === 'Maybe later';
+    }, options: [
+        { value: 'Photos', text: { en: 'Photos', bn: 'ছবি' } },
+        { value: 'Electricity bills', text: { en: 'Electricity bills', bn: 'বিদ্যুৎ বিল' } },
+        { value: 'Fuel records', text: { en: 'Fuel records', bn: 'জ্বালানি রেকর্ড' } },
+        { value: 'Purchase receipts', text: { en: 'Purchase receipts', bn: 'ক্রয় রসিদ' } },
+        { value: 'Sales records', text: { en: 'Sales records', bn: 'বিক্রয় রেকর্ড' } },
+        { value: 'Waste sale receipts', text: { en: 'Waste sale receipts', bn: 'বর্জ্য বিক্রয়ের রসিদ' } },
+        { value: 'Maintenance records', text: { en: 'Maintenance records', bn: 'রক্ষণাবেক্ষণের রেকর্ড' } },
+        { value: 'Farm/input records', text: { en: 'Farm/input records', bn: 'খামার/উপকরণ রেকর্ড' } },
+        { value: 'Training certificate', text: { en: 'Training certificate', bn: 'পশিক্ষণ সনদ' } },
+        { value: 'Trade licence/registration', text: { en: 'Trade licence/registration', bn: 'ট্রেড লাইসেন্স/নিবন্ধন' } },
+        { value: 'Buyer/supplier documents', text: { en: 'Buyer/supplier documents', bn: 'ক্রেতা/সরবরাহকারীর নথিপত্র' } },
+        { value: 'Nothing yet', text: { en: 'Nothing yet', bn: 'এখনো কিছু নেই' } },
+        { value: 'I do not know', text: { en: 'I do not know', bn: 'আমি জানি না' } }
+    ]},
+    { id: 'P26', backendTag: 'certification_interest', type: 'select', text: { en: 'Are you interested in any certification, recognition, buyer compliance, or green label in the future?', bn: 'আপনি কি ভবিষ্যতে কোনো সার্টিফিকেশন, স্বীকৃতি, বা গ্রীন লেবেলে আগ্রহী?' }, options: [
+        { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
+        { value: 'Yes, definitely', text: { en: 'Yes, definitely', bn: 'হ্যাঁ, অবশ্যই' } },
+        { value: 'Maybe, if it helps my business', text: { en: 'Maybe, if it helps my business', bn: 'হয়তো, যদি এটি আমার ব্যবসাকে সাহায্য করে' } },
+        { value: 'No, not interested', text: { en: 'No, not interested', bn: 'না, আগ্রহী নই' } },
+        { value: 'I do not know what certification means', text: { en: 'I do not know what certification means', bn: 'আমি জানি না সার্টিফিকেশনের মানে কী' } }
+    ]},
+    { id: 'P27', backendTag: 'preferred_certification_pathway', type: 'checkbox', text: { en: 'Which type of recognition or certification would be most useful for your business?', bn: 'কোন ধরণের স্বীকৃতি বা সার্টিফিকেশন আপনার ব্যবসার জন্য সবচেয়ে কার্যকর হবে?' }, dependsOn: (a) => {
+        const p26 = a['P26'] as string;
+        return p26 === 'Yes, definitely' || p26 === 'Maybe, if it helps my business';
+    }, options: [
+        { value: 'Green business recognition', text: { en: 'Green business recognition', bn: 'সবুজ ব্যবসার স্বীকৃতি' } },
+        { value: 'ISO 14001-style environmental management readiness', text: { en: 'ISO 14001-style environmental management readiness', bn: 'ISO 14001-স্টাইলের পরিবেশ ব্যবস্থাপনার প্রস্তুতি' } },
+        { value: 'Organic or safe food/agriculture certification', text: { en: 'Organic or safe food/agriculture certification', bn: 'অর্গানিক বা নিরাপদ খাদ্য/কৃষি সার্টিফিকেশন' } },
+        { value: 'Textile/garment buyer compliance or sustainability readiness', text: { en: 'Textile/garment buyer compliance or sustainability readiness', bn: 'টেক্সটাইল/গার্মেন্টস ক্রেতার কমপ্লায়েন্স বা সাসটেইনেবিলিটি প্রস্তুতি' } },
+        { value: 'LEED/EDGE-style green building or facility improvement readiness', text: { en: 'LEED/EDGE-style green building or facility improvement readiness', bn: 'LEED/EDGE-স্টাইলের সবুজ ভবন বা কারখানার উন্নতির প্রস্তুতি' } },
+        { value: 'Recycled product or circular economy certification', text: { en: 'Recycled product or circular economy certification', bn: 'রিসাইকেল করা পণ্য বা সার্কুলার অর্থনীতি সার্টিফিকেশন' } },
+        { value: 'Food safety certification', text: { en: 'Food safety certification', bn: 'খাদ্য নিরাপত্তা সার্টিফিকেশন' } },
+        { value: 'Buyer/export compliance', text: { en: 'Buyer/export compliance', bn: 'ক্রেতা/রপ্তানি কমপ্লায়েন্স' } },
+        { value: 'I am not sure', text: { en: 'I am not sure', bn: 'আমি নিশ্চিত নই' } }
+    ]},
+    { id: 'P28', backendTag: 'assessment_consent', type: 'select', text: { en: 'Are you willing to receive a green score and recommendations based on your answers?', bn: 'আপনি কি আপনার উত্তরের উপর ভিত্তি করে একটি সবুজ স্কোর এবং সুপারিশ পেতে ইচ্ছুক?' }, options: [
+        { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
+        { value: 'Yes', text: { en: 'Yes', bn: 'হ্যাঁ' } },
+        { value: 'No', text: { en: 'No', bn: 'না' } }
+    ]},
+    { id: 'P29', backendTag: 'evidence_sharing_willingness', type: 'select', text: { en: 'Are you willing to share photos, bills, receipts, or other documents later to improve the accuracy of your green score?', bn: 'আপনার সবুজ স্কোরের সঠিকতা উন্নত করতে আপনি কি ছবি, বিল, রশিদ বা অন্যান্য নথিপত্র শেয়ার করতে ইচ্ছুক?' }, dependsOn: (a) => a['P28'] === 'Yes', options: [
+        { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
+        { value: 'Yes', text: { en: 'Yes', bn: 'হ্যাঁ' } },
+        { value: 'Maybe later', text: { en: 'Maybe later', bn: 'হয়তো পরে' } },
+        { value: 'No', text: { en: 'No', bn: 'না' } }
     ]}
 ];
 
@@ -770,22 +1040,14 @@ export const SECTOR_BENCHMARKS = [
 
 export const KEY_RESOURCES: Resource[] = [
     { name: { en: 'Bangladesh Bank Green Banking Unit', bn: 'বাংলাদেশ ব্যাংক গ্রিন ব্যাংকিং ইউনিট' }, contact: 'greenbanking@bb.org.bd' },
-    { name: { en: 'SME Foundation', bn: 'এসএমই ফাউন্ডেশন' }, contact: 'Helpline: ১৯৫, www.smef.gov.bd' },
-    { name: { en: 'BGMEA Sustainability Team', bn: 'বিজিএমইএ টেকসই দল' }, contact: 'For garment factories' },
-    { name: { en: 'IDCOL', bn: 'ইডকল' }, contact: 'For solar financing (www.idcol.org)' },
-];
-
-export const LOADING_TIPS: LoadingTip[] = [
-    { en: "Did you know? Switching to LED lights can reduce your lighting energy consumption by up to 80%.", bn: "আপনি কি জানেন? এলইডি লাইটে স্যুইচ করলে আপনার আলোর শক্তি খরচ ৮০% পর্যন্ত কমাতে পারে।" },
-    { en: "Tip: Regularly check for and fix water leaks. A single dripping tap can waste over 15 liters of water a day!", bn: "টিপ: নিয়মিত জলের লিক পরীক্ষা করুন এবং মেরামত করুন। একটি ট্যাপ থেকে ফোঁটা ফোঁটা জল দিনে ১৫ লিটারের বেশি জল নষ্ট করতে পারে!" },
-    { en: "Fact: In Bangladesh, SMEs contribute to about 25% of the GDP but have immense potential for green growth.", bn: "তথ্য: বাংলাদেশে, এসএমই জিডিপির প্রায় ২৫% অবদান রাখে তবে সবুজ প্রবৃদ্ধির জন্য তাদের প্রচুর সম্ভাবনা রয়েছে।" },
-    { en: "Did you know? Composting your organic waste can reduce landfill methane emissions and create valuable fertilizer.", bn: "আপনি কি জানেন? আপনার জৈব বর্জ্য কম্পোস্টিং করলে ল্যান্ডফিলের মিথেন নির্গমন কমাতে পারে এবং মূল্যবান সার তৈরি করতে পারে।" },
-    { en: "Tip: A 'Green Team' of employees can help identify and implement simple, effective sustainability initiatives.", bn: "টিপ: কর্মীদের একটি 'গ্রিন টিম' সহজ, কার্যকর টেকসই উদ্যোগগুলি সনাক্ত করতে এবং বাস্তবায়ন করতে সহায়তা করতে পারে।" },
-    { en: "Fact: Bangladesh Bank offers special low-interest green financing schemes for sustainable projects.", bn: "তথ্য: বাংলাদেশ ব্যাংক টেকসই প্রকল্পের জন্য বিশেষ স্বল্প-সুদে সবুজ অর্থায়ন প্রকল্প অফার করে।" },
-    { en: "Did you know? Jute, the 'Golden Fibre' of Bangladesh, is a highly sustainable material that reduces plastic use.", bn: "আপনি কি জানেন? বাংলাদেশের 'সোনালী আঁশ' পাট একটি অত্যন্ত টেকসই উপাদান যা প্লাস্টিকের ব্যবহার কমায়।" },
-    { en: "Fact: Bangladesh's textile sector is a major water consumer. Technologies like waterless dyeing can save millions of liters annually.", bn: "তথ্য: বাংলাদেশের বস্ত্র খাত একটি প্রধান জল ব্যবহারকারী। জলবিহীন ডাইংয়ের মতো প্রযুক্তি বার্ষিকভাবে লক্ষ লক্ষ লিটার জল সাশ্রয় করতে পারে।" },
-    { en: "Tip: Improving your supply chain's efficiency not only cuts costs but also significantly reduces your carbon footprint from transportation.", bn: "টিপ: আপনার সাপ্লাই চেইনের দক্ষতা উন্নত করা শুধুমাত্র খরচই কমায় না, পরিবহন থেকে আপনার কার্বন ফুটপ্রিন্টও উল্লেখযোগ্যভাবে হ্রাস করে।" },
-    { en: "Fact: Green buildings with better lighting and ventilation have been shown to improve employee productivity and reduce sick days.", bn: "তথ্য: উন্নত আলো এবং বায়ুচলাচল সহ সবুজ ভবনগুলি কর্মীদের উৎপাদনশীলতা উন্নত করতে এবং অসুস্থতার দিন কমাতে দেখানো হয়েছে।" },
-    { en: "Tip: Properly sorting waste for recycling can generate extra income and reduce the burden on local landfills.", bn: "টিপ: পুনর্ব্যবহারের জন্য বর্জ্য সঠিকভাবে বাছাই করা অতিরিক্ত আয় তৈরি করতে পারে এবং স্থানীয় ল্যান্ডফিলের উপর বোঝা কমাতে পারে।" },
-    { en: "Did you know? Aquaculture can be made more sustainable by using solar-powered aerators, improving both yield and energy efficiency.", bn: "আপনি কি জানেন? সৌর-চালিত এয়ারেটর ব্যবহার করে অ্যাকুয়াকালচারকে আরও টেকসই করা যেতে পারে, যা ফলন এবং শক্তি দক্ষতা উভয়ই উন্নত করে।" }
+    { name: { en: 'SME Foundation', bn: 'এসএমই ফাউন্ডেশন' }, contact: 'Helpline: 16223, www.smef.gov.bd - Provides training and capacity building for SMEs' },
+    { name: { en: 'BGMEA Sustainability Team', bn: 'বিজিএমইএ টেকসই দল' }, contact: 'For garment factories (www.bgmea.com.bd)' },
+    { name: { en: 'IDCOL (Infrastructure Development Company Limited)', bn: 'ইডকল' }, contact: 'For solar & green financing (www.idcol.org)' },
+    { name: { en: 'BIBM (Bangladesh Institute of Bank Management)', bn: 'বিআইবিএম (গ্রিন ব্যাংকিং প্রশিক্ষণ)' }, contact: 'Sustainability training for bankers & SMEs (www.bibm.org.bd)' },
+    { name: { en: 'BITAC (Industrial Training)', bn: 'বিটাক (শিল্প প্রশিক্ষণ)' }, contact: 'Technical & sustainable manufacturing training (www.bitac.gov.bd)' },
+    { name: { en: 'GIZ Bangladesh', bn: 'জিআইজেড বাংলাদেশ' }, contact: 'Sustainable energy & resource efficiency training (www.giz.de)' },
+    { name: { en: 'Practical Action (Green Tech)', bn: 'প্রাকটিক্যাল অ্যাকশন (গ্রিন টেক)' }, contact: 'Technology for sustainable development (bd.practicalaction.org)' },
+    { name: { en: 'Bangladesh Cleaner Production Centre (BCPC)', bn: 'বাংলাদেশ ক্লিনার প্রোডাকশন সেন্টার' }, contact: 'Training on resource efficiency and cleaner production (www.bdcleanerproduction.org)' },
+    { name: { en: 'SCITI (Small and Cottage Industries Training Institute)', bn: 'ক্ষুদ্র ও কুটির শিল্প প্রশিক্ষণ ইনস্টিটিউট' }, contact: 'Provides various training programs for SME entrepreneurs (Under BSCIC - www.bscic.gov.bd)' },
+    { name: { en: 'Department of Environment (DoE)', bn: 'পরিবেশ অধিদপ্তর' }, contact: 'Guidelines and workshops on environmental compliance (www.doe.gov.bd)' }
 ];

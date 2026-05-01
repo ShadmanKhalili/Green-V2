@@ -1,0 +1,101 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- PRIMITIVES ---
+    function isSignedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    // We allow development email "sadmankhalili@gmail.com" to be the bootstrapped Super Admin
+    function isSuperAdmin() {
+      return isSignedIn() &&
+        // In real environments, `email_verified == true` should be checked!
+        request.auth.token.email == "sadmankhalili@gmail.com" &&
+        request.auth.token.email_verified == true;
+    }
+
+    // Is the user an admin in the database?
+    function isAdmin() {
+      return isSuperAdmin() || (
+        isSignedIn() && get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.role == "admin"
+      );
+    }
+    
+    function isValidId(id) {
+       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    function isValidTimestamp(val) {
+      return val == request.time;
+    }
+
+    // --- VALIDATION HELPERS ---
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['email', 'role', 'createdAt']) &&
+        data.size() >= 3 && data.size() <= 4 &&
+        data.email is string && data.email.size() <= 256 &&
+        data.role in ['enumerator', 'admin'] &&
+        (data.keys().hasAll(['name']) ? (data.name is string && data.name.size() <= 100) : true) &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    function isValidAssessment(data) {
+      return data.keys().hasAll(['enumeratorId', 'createdAt', 'totalScore', 'scores', 'probingAnswers']) &&
+        data.size() >= 5 && data.size() <= 6 &&
+        data.enumeratorId is string && data.enumeratorId == request.auth.uid &&
+        data.totalScore is number &&
+        data.scores is map &&
+        data.probingAnswers is map &&
+        (data.keys().hasAll(['businessInfo']) ? (data.businessInfo is map) : true) &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    // --- PATHS ---
+
+    match /userProfiles/{userId} {
+      allow get: if isValidId(userId) && (isSuperAdmin() || isAdmin() || (isSignedIn() && request.auth.uid == userId));
+      allow list: if isSuperAdmin() || isAdmin();
+      
+      // Bootstrap creation or admin creation
+      allow create: if isValidId(userId) && userId == request.auth.uid && isSignedIn() && (
+        isSuperAdmin() || (
+            // A regular user can ONLY create an enumerator profile for themselves
+            isValidUserProfile(incoming()) && incoming().role == 'enumerator'
+        )
+      );
+
+      // Only admins can update user profiles
+      allow update: if isValidId(userId) && (isSuperAdmin() || isAdmin()) && isValidUserProfile(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['role', 'name'])
+      );
+    }
+
+    match /assessments/{assessmentId} {
+      // Enumerators can get their own, admins can get any
+      allow get: if isValidId(assessmentId) && isSignedIn() && (
+        isSuperAdmin() || isAdmin() || existing().enumeratorId == request.auth.uid
+      );
+      
+      // Admins can list all. Enumerators can list their own.
+      allow list: if isSignedIn() && (
+        isSuperAdmin() || isAdmin() || resource.data.enumeratorId == request.auth.uid
+      );
+
+      allow create: if isValidId(assessmentId) && isSignedIn() && isValidAssessment(incoming());
+      
+      // We don't allow modifying assessments once submitted for compliance. Admins also shouldn't change the raw data.
+      allow update: if false;
+      allow delete: if false;
+    }
+  }
+}

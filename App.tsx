@@ -1,282 +1,321 @@
 
 
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Language, Indicator, Pillar, ProbingQuestion, ProbingAnswers, LoadingTip } from './types';
-import { PILLARS, SCORE_INTERPRETATIONS, SECTOR_BENCHMARKS, KEY_RESOURCES, PROBING_QUESTIONS, QUESTION_BANK, LOADING_TIPS } from './constants';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { Language, Indicator, Pillar, ProbingQuestion, ProbingAnswers } from './types';
+import { MAIN_QUESTIONS, DOMAINS } from './questionBank';
+import { SCORING_OPTIONS, PROBING_QUESTIONS, SCORE_INTERPRETATIONS, SECTOR_BENCHMARKS, KEY_RESOURCES } from './constants';
+import { GoogleGenAI } from "@google/genai";
+import { useAuth } from './AuthContext';
+import { AdminDashboard } from './src/AdminDashboard';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from './firebase';
 
 declare global {
   interface Window {
     jspdf: any;
     html2canvas: any;
-    DOMPurify: {
-      sanitize: (dirty: string) => string;
-    };
   }
 }
 
-const PILLAR_ICONS: { [key: number]: string } = {
-  1: 'fa-solid fa-leaf', // Energy & Resource Efficiency
-  2: 'fa-solid fa-shield-halved', // Environmental Management
-  3: 'fa-solid fa-hand-holding-dollar', // Green Finance
-  4: 'fa-solid fa-users', // Social Sustainability
-  5: 'fa-solid fa-lightbulb' // Digital & Innovation
-};
-
-
 // --- Helper functions ---
-const getInitialScores = (indicators: Indicator[]) => {
-  return indicators.reduce<{ [key: string]: number }>((acc, indicator) => {
-    acc[indicator.id] = -1; // -1 represents an unanswered question
+const getInitialScores = (questions: MainQuestion[]) => {
+  return questions.reduce<{ [key: string]: number }>((acc, question) => {
+    acc[question.id] = -2; // -2 represents an unanswered question, -1 will be N/A
     return acc;
   }, {});
 };
 
-const generateCustomAssessmentData = (answers: ProbingAnswers) => {
-    const profileTags = new Set<string>();
-    const activity = answers.PQ1 as string;
-    if (activity?.includes('Manufacturing')) profileTags.add('MFG');
-    if (activity?.includes('Trading')) profileTags.add('TRD');
-    if (activity?.includes('Retail')) {
-        profileTags.add('TRD');
-        profileTags.add('RETAIL');
+const getWeightNumber = (priority: WeightPriority): number => {
+    switch (priority) {
+        case 'Very High': return 4;
+        case 'High': return 3;
+        case 'Medium': return 2;
+        case 'Low': return 1;
+        case 'Pathway': return 0; // Exclude from core score 
+        default: return 1;
     }
-    if (activity?.includes('Service')) profileTags.add('SRV');
-    if (activity?.includes('Agriculture')) profileTags.add('AGR');
-    const location = answers.PQ2 as string;
-    if (location?.includes('City')) profileTags.add('URB');
-    if (location?.includes('Rural')) profileTags.add('RUR');
-    const customers = answers.PQ3 as string;
-    if (customers?.includes('Export')) profileTags.add('EXP');
-    if (customers?.includes('Domestic')) profileTags.add('DOM');
-    const turnover = answers.PQ4 as string;
-    if (turnover === '< Tk 10 lakh' || turnover === 'Tk 10-50 lakh') profileTags.add('MICRO');
-    else if (turnover === 'Tk 50 lakh - 2 crore') profileTags.add('SMALL');
-    else if (turnover === 'Tk 2-5 crore' || turnover === '> Tk 5 crore') profileTags.add('MEDIUM');
-    (answers.PQ5 as string[])?.forEach(resource => {
-        if (resource.includes('Electricity')) profileTags.add('ELEC');
-        if (resource.includes('Fuel')) profileTags.add('FUEL');
-        if (resource.includes('Water')) profileTags.add('WATER');
-        if (resource.includes('Chemicals')) profileTags.add('CHEM');
-    });
-    const awareness = (answers.PQ6 as string[]) || [];
-    if (awareness.includes('None of the above')) profileTags.add('BEGINNER');
-    else if (awareness.length > 2) profileTags.add('ADVANCED');
-    else profileTags.add('AWARE');
-    
-    const calculateRelevance = (indicator: Indicator): number => {
-        let score = 0;
-        indicator.tags.forEach(tag => {
-            if (profileTags.has(tag)) score++;
-            if (tag === 'ALL') score += 0.5;
-        });
-        return score;
-    };
+};
 
-    const scoredQuestions = QUESTION_BANK.map(q => ({ ...q, relevance: calculateRelevance(q) }))
-                                          .sort((a, b) => b.relevance - a.relevance);
+const generateCustomAssessmentData = (answers: ProbingAnswers) => {
+    // Determine which questions apply based on routing conditions
+    const applicableQuestions = MAIN_QUESTIONS.filter(q => q.routingCondition(answers));
     
-    const initialAssessment = PILLARS.map(pillar => {
-        const pillarQuestions = scoredQuestions.filter(q => q.pillarId === pillar.id);
-        const questionCount: { [key: number]: number } = { 1: 7, 2: 7, 3: 5, 4: 5, 5: 4 };
-        const selectedIndicators = pillarQuestions.slice(0, questionCount[pillar.id]);
-        return { ...pillar, indicators: selectedIndicators };
+    // Group by Domain
+    const groupedByDomain: { domain: Domain; questions: MainQuestion[] }[] = [];
+    DOMAINS.forEach(domain => {
+        const questionsInDomain = applicableQuestions.filter(q => q.domain.includes(domain.code));
+        if (questionsInDomain.length > 0) {
+            groupedByDomain.push({ domain, questions: questionsInDomain });
+        }
     });
 
-    return { fullRankedQuestions: scoredQuestions, initialAssessment };
+    return { applicableQuestions, groupedByDomain };
 };
 
 // --- UI Components ---
 
-const LanguageSwitcher: React.FC<{ language: Language; setLanguage: (lang: Language) => void; }> = ({ language, setLanguage }) => (
-  <div className="absolute top-1/2 -translate-y-1/2 right-6 z-10">
-    <button
-      onClick={() => setLanguage(language === 'en' ? 'bn' : 'en')}
-      className="px-4 py-2 bg-white/20 backdrop-blur-sm border border-white/30 text-white font-semibold rounded-full shadow-lg hover:bg-white/30 transition-all duration-300 flex items-center gap-2 transform hover:scale-105"
-    >
-      <i className="fa-solid fa-language text-xl"></i>
-      <span className="hidden md:inline">{language === 'en' ? 'বাংলা' : 'English'}</span>
-    </button>
-  </div>
-);
+const ProbingQuestionComponent: React.FC<{ index: number; question: ProbingQuestion; value: string | string[]; onChange: (id: string, value: any) => void; language: Language; isRequired: boolean; }> = ({ index, question, value, onChange, language, isRequired }) => {
+    let isAnswered = false;
+    if (question.type === 'checkbox') {
+        isAnswered = Array.isArray(value) && value.length > 0;
+    } else {
+        isAnswered = typeof value === 'string' && value !== 'default' && value.trim() !== '';
+    }
 
-const ProbingQuestionComponent: React.FC<{ question: ProbingQuestion; value: string | string[]; onChange: (id: string, value: any) => void; language: Language; style?: React.CSSProperties }> = ({ question, value, onChange, language, style }) => (
-    <div className="mb-6 animate-fade-in-up" style={style}>
-        <label className="block text-lg font-semibold text-brand-gray-700 mb-2">{question.text[language]}</label>
-        {question.type === 'select' && (
-            <select 
-                value={value as string} 
-                onChange={e => onChange(question.id, e.target.value)}
-                className="w-full p-3 border border-brand-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-brand-green transition-all"
-            >
-                {question.options.map(opt => <option key={opt.value} value={opt.value}>{opt.text[language]}</option>)}
-            </select>
-        )}
-        {question.type === 'checkbox' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 border border-brand-gray-200 rounded-lg bg-brand-gray-50">
-                {question.options.map(opt => (
-                    <label key={opt.value} className="flex items-center space-x-3 cursor-pointer p-2 rounded-md hover:bg-green-100 transition-colors">
-                        <input 
-                            type="checkbox"
-                            value={opt.value}
-                            checked={Array.isArray(value) && value.includes(opt.value)}
-                            onChange={e => {
-                                const currentValues = Array.isArray(value) ? value : [];
-                                const newValues = e.target.checked 
-                                    ? [...currentValues, opt.value] 
-                                    : currentValues.filter(v => v !== opt.value);
-                                onChange(question.id, newValues);
-                            }}
-                            className="h-5 w-5 rounded border-gray-300 text-brand-green focus:ring-brand-green custom-checkbox transition-all"
-                        />
-                        <span className="text-brand-gray-700">{opt.text[language]}</span>
-                    </label>
-                ))}
+    return (
+        <div className={`mb-6 p-5 rounded-xl border-l-4 transition-all duration-300 shadow-sm ${
+            isAnswered 
+                ? 'border-green-500 bg-green-50' 
+                : 'border-gray-300 bg-gray-50 hover:border-gray-400'
+        }`}>
+            <label className="block text-lg font-semibold text-gray-800 mb-4 flex items-start gap-3">
+                <span className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold shrink-0 mt-0.5 shadow-sm ${
+                    isAnswered ? 'bg-green-500 text-white' : 'bg-white text-gray-600 border border-gray-300'
+                }`}>
+                    {isAnswered ? <i className="fa-solid fa-check"></i> : index}
+                </span>
+                <span>
+                    {question.text[language]}
+                    {isRequired && <span className="text-red-500 ml-1.5 align-top text-xl" title={language === 'en' ? 'Required' : 'আবশ্যক'}>*</span>}
+                </span>
+            </label>
+            <div className="ml-11">
+                {question.type === 'text' && (
+                    <input 
+                        type="text" 
+                        value={value as string} 
+                        onChange={e => onChange(question.id, e.target.value)}
+                        className={`w-full p-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors ${
+                            isAnswered ? 'border-green-300 bg-white' : 'border-gray-300'
+                        }`}
+                        placeholder={language === 'en' ? 'Type your answer here...' : 'আপনার উত্তর এখানে লিখুন...'}
+                    />
+                )}
+                {question.type === 'select' && question.options && (
+                    <select 
+                        value={value as string || 'default'} 
+                        onChange={e => onChange(question.id, e.target.value)}
+                        className={`w-full p-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors ${
+                            isAnswered ? 'border-green-300 bg-white' : 'border-gray-300'
+                        }`}
+                    >
+                        {question.options.map(opt => <option key={opt.value} value={opt.value}>{opt.text[language]}</option>)}
+                    </select>
+                )}
+                {question.type === 'checkbox' && question.options && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {question.options.map(opt => {
+                            const isChecked = (value as string[]).includes(opt.value);
+                            return (
+                                <label key={opt.value} className={`flex items-start p-3 border rounded-lg cursor-pointer transition-colors ${
+                                    isChecked ? 'border-green-500 bg-green-50' : 'border-gray-200 bg-white hover:border-green-300'
+                                }`}>
+                                    <div className="flex h-6 items-center">
+                                        <input 
+                                            type="checkbox"
+                                            value={opt.value}
+                                            checked={isChecked}
+                                            onChange={e => {
+                                                const currentValues = (value as string[]) || [];
+                                                const newValues = e.target.checked 
+                                                    ? [...currentValues, opt.value] 
+                                                    : currentValues.filter(v => v !== opt.value);
+                                                onChange(question.id, newValues);
+                                            }}
+                                            className="h-5 w-5 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                        />
+                                    </div>
+                                    <div className="ml-3 text-base">
+                                        <span className={isChecked ? 'text-green-800 font-medium' : 'text-gray-700'}>{opt.text[language]}</span>
+                                    </div>
+                                </label>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
-        )}
-    </div>
-);
+        </div>
+    );
+};
 
 const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => void; language: Language; }> = ({ onComplete, language }) => {
     const [answers, setAnswers] = useState<ProbingAnswers>({});
-    const [isComplete, setIsComplete] = useState(false);
 
     const handleAnswerChange = (id: string, value: any) => {
         setAnswers(prev => ({ ...prev, [id]: value }));
     };
 
-    useEffect(() => {
-        const requiredQuestions = PROBING_QUESTIONS.filter(q => q.type === 'select').map(q => q.id);
-        const allRequiredAnswered = requiredQuestions.every(id => answers[id] && answers[id] !== 'default');
-        setIsComplete(allRequiredAnswered);
+    const visibleQuestions = useMemo(() => {
+        return PROBING_QUESTIONS.filter(q => {
+            if (!q.dependsOn) return true;
+            return q.dependsOn(answers);
+        });
     }, [answers]);
 
+    const requiredQuestions = useMemo(() => visibleQuestions.filter(q => q.type === 'select' || q.type === 'text'), [visibleQuestions]);
+    const answeredCount = useMemo(() => requiredQuestions.filter(q => {
+        const val = answers[q.id];
+        if (!val || val === 'default') return false;
+        if (typeof val === 'string' && val.trim() === '') return false;
+        return true;
+    }).length, [answers, requiredQuestions]);
+    const isComplete = answeredCount === requiredQuestions.length;
+    const remainingCount = requiredQuestions.length - answeredCount;
+
     return (
-        <div className="container mx-auto p-4 md:p-8">
-            <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-2xl p-8 transform hover:-translate-y-1 transition-transform duration-300 animate-fade-in-up">
-                <h2 className="text-4xl font-extrabold text-center text-brand-gray-800 mb-2">{language === 'en' ? 'Tell Us About Your Business' : 'আপনার ব্যবসা সম্পর্কে বলুন'}</h2>
-                <p className="text-center text-brand-gray-700 mb-8">{language === 'en' ? 'Your answers will help us create a personalized assessment.' : 'আপনার উত্তর আমাদের একটি ব্যক্তিগত মূল্যায়ন তৈরি করতে সাহায্য করবে।'}</p>
-                {PROBING_QUESTIONS.map((q, index) => (
-                    <ProbingQuestionComponent key={q.id} question={q} value={answers[q.id] || (q.type === 'checkbox' ? [] : '')} onChange={handleAnswerChange} language={language} style={{ animationDelay: `${100 + index * 50}ms` }} />
-                ))}
-                <button 
-                    onClick={() => onComplete(answers)}
-                    disabled={!isComplete}
-                    className="w-full mt-4 py-4 px-6 bg-brand-green text-white font-bold text-lg rounded-lg shadow-lg hover:bg-brand-green-dark disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-3"
-                >
-                    <i className="fa-solid fa-wand-magic-sparkles"></i>
-                    {language === 'en' ? 'Generate My Assessment' : 'আমার মূল্যায়ন তৈরি করুন'}
-                </button>
+        <div className="container mx-auto p-4 sm:p-8 hover-effects-enabled">
+            <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl p-6 sm:p-10 border border-gray-100 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-2 bg-gray-100">
+                    <div 
+                        className="h-full bg-green-500 transition-all duration-500 ease-out"
+                        style={{ width: `${requiredQuestions.length > 0 ? (answeredCount / requiredQuestions.length) * 100 : 0}%` }}
+                    ></div>
+                </div>
+
+                <h2 className="text-3xl sm:text-4xl font-extrabold text-center text-gray-800 mb-3 tracking-tight mt-2">{language === 'en' ? 'Tell us about your business' : 'আপনার ব্যবসা সম্পর্কে আমাদের বলুন'}</h2>
+                <p className="text-center text-gray-600 mb-2 text-lg">{language === 'en' ? 'Your answers will help us create a personalized assessment.' : 'আপনার উত্তর আমাদের একটি ব্যক্তিগত মূল্যায়ন তৈরি করতে সাহায্য করবে।'}</p>
+                <div className="flex justify-center mb-8">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 text-sm font-semibold rounded-full border border-green-200">
+                        <i className="fa-solid fa-tasks"></i> {answeredCount} / {requiredQuestions.length} {language === 'en' ? 'completed' : 'সম্পন্ন হয়েছে'}
+                    </span>
+                </div>
+                
+                <div className="space-y-4">
+                    {visibleQuestions.map((q, index) => {
+                        const isRequired = q.type === 'select' || q.type === 'text';
+                        return (
+                            <ProbingQuestionComponent key={q.id} index={index + 1} question={q} value={answers[q.id] || (q.type === 'checkbox' ? [] : (q.type === 'select' ? 'default' : ''))} onChange={handleAnswerChange} language={language} isRequired={isRequired} />
+                        )
+                    })}
+                </div>
+                <div className="mt-8 pt-6 border-t border-gray-100">
+                    <button 
+                        onClick={() => onComplete(answers)}
+                        disabled={!isComplete}
+                        className={`w-full py-4 px-6 font-bold text-xl rounded-xl shadow-md transition-all duration-300 flex items-center justify-center gap-3 ${
+                            isComplete 
+                                ? 'bg-green-600 text-white hover:bg-green-700 hover:shadow-lg transform hover:-translate-y-1' 
+                                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                        }`}
+                    >
+                        {isComplete ? (
+                            <>
+                                <span>{language === 'en' ? 'Generate My Assessment' : 'আমার মূল্যায়ন তৈরি করুন'}</span>
+                                <i className="fa-solid fa-arrow-right"></i>
+                            </>
+                        ) : (
+                            <>
+                                <span>
+                                    {language === 'en' 
+                                        ? `Please answer ${remainingCount} more required question${remainingCount !== 1 ? 's' : ''}` 
+                                        : `অনুগ্রহ করে আরও ${remainingCount}টি আবশ্যক প্রশ্নের উত্তর দিন`}
+                                </span>
+                            </>
+                        )}
+                    </button>
+                </div>
             </div>
         </div>
     );
 };
 
-const Tooltip: React.FC<{ text: React.ReactNode; children: React.ReactNode; }> = ({ text, children }) => {
-    return (
-        <div className="tooltip-container">
-            {children}
-            <div className="tooltip-text">{text}</div>
-        </div>
-    );
-};
-
-const IndicatorRow: React.FC<{ 
-    indicator: Indicator; 
+const QuestionRow: React.FC<{ 
+    index: number;
+    question: MainQuestion; 
     currentScore: number; 
     onScoreChange: (id: string, score: number) => void; 
     language: Language; 
-    onReplace: (pillarId: number, questionId: string) => void;
-    canReplace: boolean;
-    style?: React.CSSProperties;
-}> = ({ indicator, currentScore, onScoreChange, language, onReplace, canReplace, style }) => {
-    const tooltipContent = (
-        <div className="text-sm">
-            <p className="font-bold mb-2">{language === 'en' ? 'Scoring Guide:' : 'স্কোরিং নির্দেশিকা:'}</p>
-            <ul className="space-y-1">
-                {indicator.scoringGuide.map(option => (
-                    <li key={option.score}>
-                        <span className="font-semibold">{option.score} Pts:</span> {option.description[language]}
-                    </li>
-                ))}
-            </ul>
-        </div>
-    );
+}> = ({ index, question, currentScore, onScoreChange, language }) => {
+    const isAnswered = currentScore !== -2;
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center py-4 border-b border-gray-200 last:border-b-0 animate-fade-in-up" style={style}>
-            <div className="md:col-span-5 flex items-center gap-2">
-                <p className="font-medium text-brand-gray-700">{indicator.text[language]}</p>
-                <Tooltip text={tooltipContent}>
-                    <i className="fa-solid fa-circle-info text-gray-400 hover:text-brand-teal cursor-pointer transition-colors"></i>
-                </Tooltip>
-            </div>
-            <div className="md:col-span-7 flex items-center gap-2">
-                <select value={currentScore} onChange={(e) => onScoreChange(indicator.id, parseInt(e.target.value, 10))} className="flex-grow p-2 border border-brand-gray-300 rounded-md shadow-sm focus:ring-brand-green focus:border-brand-green transition-all">
-                    <option value="-1" disabled>{language === 'en' ? 'Select an option...' : 'একটি বিকল্প নির্বাচন করুন...'}</option>
-                    {indicator.scoringGuide.map(option => (
-                        <option key={option.score} value={option.score}>{option.score} - {option.description[language]}</option>
-                    ))}
-                </select>
-                <div className="w-20 text-center">
-                    <span className="font-bold text-xl text-brand-green">{currentScore > -1 ? currentScore : '-'}</span>
-                    <span className="text-gray-500"> / {indicator.maxScore}</span>
+        <div className={`grid grid-cols-1 md:grid-cols-[1fr_1.5fr] gap-6 items-center p-5 rounded-xl border-l-4 transition-all duration-300 shadow-sm mb-4 ${
+            isAnswered 
+                ? 'border-green-500 bg-green-50/20' 
+                : 'border-blue-300 bg-blue-50/20 hover:border-blue-400'
+        }`}>
+            <div className="flex items-start gap-3">
+                <span className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold shrink-0 mt-0.5 shadow-sm ${
+                    isAnswered ? 'bg-green-500 text-white' : 'bg-white text-blue-700 border border-blue-200'
+                }`}>
+                    {isAnswered ? <i className="fa-solid fa-check"></i> : index}
+                </span>
+                <div>
+                    <label className="font-semibold text-gray-800 text-lg cursor-pointer">
+                        {question.text[language]}
+                        <span className="text-red-500 ml-1.5 align-top text-xl" title={language === 'en' ? 'Required' : 'আবশ্যক'}>*</span>
+                    </label>
+                    <p className="text-sm text-gray-500 mt-1 capitalize"><i className="fa-solid fa-weight-hanging mr-1"></i>{language === 'en' ? 'Weight:' : 'ওজন:'} {question.weightPriority}</p>
                 </div>
-                <button 
-                    onClick={() => onReplace(indicator.pillarId, indicator.id)} 
-                    disabled={!canReplace}
-                    title={language === 'en' ? 'Replace Question' : 'প্রশ্ন প্রতিস্থাপন করুন'}
-                    className="p-2 text-gray-500 hover:text-brand-green disabled:text-gray-300 disabled:cursor-not-allowed transition-colors transform hover:rotate-45 duration-300"
-                >
-                    <i className="fa-solid fa-arrows-rotate fa-lg"></i>
-                </button>
+            </div>
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+               <select 
+                   value={currentScore} 
+                   onChange={(e) => onScoreChange(question.id, parseInt(e.target.value, 10))} 
+                   className={`flex-grow w-full p-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors ${
+                       isAnswered ? 'border-green-300 bg-white' : 'border-gray-300'
+                   }`}
+               >
+                 <option value="-2" disabled>{language === 'en' ? 'Select an option...' : 'একটি বিকল্প নির্বাচন করুন...'}</option>
+                 {SCORING_OPTIONS.map(option => (
+                    <option key={option.score} value={option.score}>{option.text[language]}</option>
+                 ))}
+               </select>
+               <div className="w-full sm:w-28 shrink-0 text-center bg-white border border-gray-200 shadow-sm rounded-lg py-2">
+                    <span className="font-bold text-xl text-green-700">{currentScore > -1 ? currentScore : (currentScore === -1 ? 'N/A' : '-')}</span>
+                    <span className="text-gray-500 font-medium"> / 4</span>
+               </div>
             </div>
         </div>
     );
 };
 
-const PillarCard: React.FC<{ 
-    pillar: Pillar; 
+const DomainCard: React.FC<{ 
+    domainGroup: { domain: Domain; questions: MainQuestion[] }; 
     scores: { [key: string]: number }; 
     onScoreChange: (id: string, score: number) => void; 
     language: Language;
-    onReplaceQuestion: (pillarId: number, questionId: string) => void;
-    replacementsLeft: number;
-    canPillarBeReplaced: boolean;
-    style?: React.CSSProperties;
-}> = ({ pillar, scores, onScoreChange, language, onReplaceQuestion, replacementsLeft, canPillarBeReplaced, style }) => {
-  // FIX: Explicitly check if the score is a number before comparison to avoid potential errors.
-  const pillarScore = pillar.indicators.reduce((acc, ind) => {
-    const score = scores[ind.id];
-    return acc + (typeof score === 'number' && score > -1 ? score : 0);
-  }, 0);
-  const maxPillarScore = pillar.indicators.reduce((acc, ind) => acc + ind.maxScore, 0);
+}> = ({ domainGroup, scores, onScoreChange, language }) => {
+  // Calculate score
+  let totalScore = 0;
+  let maxPossible = 0;
+  
+  domainGroup.questions.forEach(q => {
+      const score = scores[q.id];
+      if (score > -1 && q.weightPriority !== 'Pathway') {
+          const weight = getWeightNumber(q.weightPriority);
+          totalScore += (score * weight);
+          maxPossible += (4 * weight); // Max score per question is 4
+      }
+  });
+
+  const displayScore = maxPossible > 0 ? Math.round((totalScore / maxPossible) * 100) : 0;
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6 mb-8 transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 animate-fade-in-up" style={style}>
-      <div className="flex justify-between items-start mb-4">
+    <div className="bg-white rounded-xl shadow-lg p-6 mb-8 transition-shadow hover:shadow-xl">
+      <div className="flex justify-between items-start mb-6">
         <div className="flex items-center gap-4">
-          <i className={`${PILLAR_ICONS[pillar.id]} text-3xl text-brand-green`}></i>
+          <div className="w-12 h-12 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-2xl shrink-0">
+               <i className={domainGroup.domain.icon}></i>
+          </div>
           <div>
-            <h2 className="text-2xl font-bold text-brand-green-dark">{pillar.id}. {pillar.title[language]}</h2>
-            <p className="text-gray-500">{language === 'en' ? 'Weight' : 'গুরুত্ব'}: {pillar.points} {language === 'en' ? 'Points' : 'পয়েন্ট'}</p>
+            <h2 className="text-2xl font-bold text-green-800">{domainGroup.domain.name[language]}</h2>
+            <p className="text-gray-500">{domainGroup.questions.length} Questions</p>
           </div>
         </div>
         <div className="text-right">
-            <p className="text-4xl font-extrabold text-brand-green">{pillarScore}</p>
-            <p className="text-gray-500">/ {maxPillarScore}</p>
+            <p className="text-3xl font-bold text-green-700">{displayScore}%</p>
         </div>
       </div>
-      <div className="mt-4">
-        {pillar.indicators.map((indicator, index) => (
-          <IndicatorRow 
-            key={indicator.id} 
-            indicator={indicator} 
-            currentScore={scores[indicator.id] ?? -1} 
+      <div className="space-y-4">
+        {domainGroup.questions.map((question, index) => (
+          <QuestionRow 
+            key={question.id} 
+            index={index + 1}
+            question={question} 
+            currentScore={scores[question.id] ?? -2} 
             onScoreChange={onScoreChange} 
             language={language}
-            onReplace={onReplaceQuestion}
-            canReplace={replacementsLeft > 0 && canPillarBeReplaced}
-            style={{ animationDelay: `${index * 75}ms` }}
           />
         ))}
       </div>
@@ -284,61 +323,18 @@ const PillarCard: React.FC<{
   );
 };
 
-const AnimatedNumber = ({ value }: { value: number }) => {
-    const [displayValue, setDisplayValue] = useState(0);
-    const ref = useRef<HTMLSpanElement>(null);
-
-    useEffect(() => {
-        const observer = new IntersectionObserver((entries) => {
-            if (entries[0].isIntersecting) {
-                let start = 0;
-                const end = value;
-                if (start === end) return;
-                const duration = 1500;
-                const incrementTime = (duration / end);
-                const timer = setInterval(() => {
-                    start += 1;
-                    setDisplayValue(start);
-                    if (start === end) {
-                        clearInterval(timer);
-                    }
-                }, incrementTime);
-                observer.disconnect();
-            }
-        }, { threshold: 0.5 });
-        if(ref.current) observer.observe(ref.current);
-        return () => observer.disconnect();
-    }, [value]);
-
-    return <span ref={ref}>{displayValue}</span>;
-};
-
 const ScoreGauge: React.FC<{ score: number; }> = ({ score }) => {
     const interpretation = SCORE_INTERPRETATIONS.find(interp => score >= interp.minScore)!;
     const circumference = 2 * Math.PI * 52;
-    const [offset, setOffset] = useState(circumference);
-    
-    useEffect(() => {
-        // Animate stroke on load
-        const progress = score / 100;
-        const finalOffset = circumference - progress * circumference;
-        setTimeout(() => setOffset(finalOffset), 100);
-    }, [score, circumference]);
+    const offset = circumference - (score / 100) * circumference;
 
     return (
         <div className="relative flex items-center justify-center w-48 h-48">
             <svg className="transform -rotate-90" width="100%" height="100%" viewBox="0 0 120 120">
                 <circle cx="60" cy="60" r="52" strokeWidth="16" className="text-gray-200" fill="transparent" />
-                <circle cx="60" cy="60" r="52" strokeWidth="16" fill="transparent" className={`${interpretation.textColor}`}
-                    strokeDasharray={circumference}
-                    strokeDashoffset={offset}
-                    strokeLinecap="round"
-                    style={{ transition: 'stroke-dashoffset 1.5s ease-out' }}
-                />
+                <circle cx="60" cy="60" r="52" strokeWidth="16" fill="transparent" className={`${interpretation.textColor} transition-all duration-1000 ease-out`} strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" />
             </svg>
-            <div className="absolute text-5xl font-bold text-brand-gray-700">
-                <AnimatedNumber value={score} />
-            </div>
+            <span className="absolute text-5xl font-bold text-gray-700">{score}</span>
         </div>
     );
 };
@@ -347,23 +343,23 @@ const ResultsSummaryCard: React.FC<{ totalScore: number; language: Language; }> 
   const interpretation = useMemo(() => SCORE_INTERPRETATIONS.find(interp => totalScore >= interp.minScore)!, [totalScore]);
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-8 my-8 animate-fade-in-up">
-      <h2 className="text-3xl font-bold text-center text-brand-gray-800 mb-6">{language === 'en' ? 'Your Assessment Result' : 'আপনার মূল্যায়ন ফলাফল'}</h2>
+    <div className="bg-white rounded-xl shadow-lg p-8 my-8">
+      <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">{language === 'en' ? 'Your Assessment Result' : 'আপনার মূল্যায়ন ফলাফল'}</h2>
       <div className="flex flex-col items-center">
         <ScoreGauge score={totalScore} />
-        <div className={`mt-4 px-6 py-2 rounded-full font-semibold text-white text-lg ${interpretation.colorClass} shadow-md`}>{interpretation.rating.level[language]}</div>
+        <div className={`mt-4 px-4 py-2 rounded-full font-semibold text-white ${interpretation.colorClass}`}>{interpretation.rating.level[language]}</div>
       </div>
       <div className="mt-6 text-center">
-        <p className="text-lg text-brand-gray-700">{interpretation.rating.meaning[language]}</p>
-        <div className="mt-4 p-4 bg-brand-gray-100 rounded-lg border-l-4 border-brand-green">
-            <h4 className="font-bold text-brand-gray-800 flex items-center justify-center gap-2"><i className="fa-solid fa-rocket"></i> {language === 'en' ? 'Recommended Actions' : 'প্রস্তাবিত পদক্ষেপ'}</h4>
-            <p className="text-brand-green-dark font-medium">{interpretation.rating.actions[language]}</p>
+        <p className="text-gray-600">{interpretation.rating.meaning[language]}</p>
+        <div className="mt-4 p-4 bg-gray-100 rounded-lg">
+            <h4 className="font-bold text-gray-800">{language === 'en' ? 'Recommended Actions' : 'প্রস্তাবিত পদক্ষেপ'}</h4>
+            <p className="text-green-700">{interpretation.rating.actions[language]}</p>
         </div>
       </div>
       <div className="mt-8">
-        <h4 className="text-lg font-bold text-brand-gray-800 mb-2">{language === 'en' ? 'Sector Benchmarks' : 'খাত বেঞ্চমার্ক'}</h4>
+        <h4 className="text-lg font-bold text-gray-800 mb-2">{language === 'en' ? 'Sector Benchmarks' : 'খাত বেঞ্চমার্ক'}</h4>
         <div className="space-y-2">
-            {SECTOR_BENCHMARKS.map(bm => (<div key={bm.sector.en} className="flex justify-between items-center text-sm p-2 bg-brand-gray-50 rounded-md"><span className="text-gray-600">{bm.sector[language]}:</span><span className="font-semibold text-gray-800 bg-brand-gray-200 px-2 py-1 rounded">{bm.score}/100</span></div>))}
+            {SECTOR_BENCHMARKS.map(bm => (<div key={bm.sector.en} className="flex justify-between items-center text-sm"><span className="text-gray-600">{bm.sector[language]}:</span><span className="font-semibold text-gray-800">{bm.score}/100</span></div>))}
         </div>
       </div>
     </div>
@@ -371,10 +367,10 @@ const ResultsSummaryCard: React.FC<{ totalScore: number; language: Language; }> 
 };
 
 const InfoSection: React.FC<{ language: Language; }> = ({ language }) => (
-    <div className="bg-white rounded-xl shadow-lg p-8 my-8 animate-fade-in-up" style={{animationDelay: '400ms'}}>
-        <h2 className="text-2xl font-bold text-brand-green-dark mb-4 flex items-center gap-3"><i className="fa-solid fa-book-open"></i> {language === 'en' ? 'Implementation Guide & Resources' : 'বাস্তবায়ন নির্দেশিকা ও সম্পদ'}</h2>
+    <div className="bg-white rounded-xl shadow-lg p-8 my-8">
+        <h2 className="text-2xl font-bold text-green-800 mb-4">{language === 'en' ? 'Implementation Guide & Resources' : 'বাস্তবায়ন নির্দেশিকা ও সম্পদ'}</h2>
         <div className="mb-6">
-            <h3 className="text-xl font-semibold text-brand-gray-700 mb-2">{language === 'en' ? 'Key Resources in Bangladesh' : 'বাংলাদেশে মূল সম্পদ'}</h3>
+            <h3 className="text-xl font-semibold text-gray-700 mb-2">{language === 'en' ? 'Key Resources in Bangladesh' : 'বাংলাদেশে মূল সম্পদ'}</h3>
             <ul className="list-disc list-inside space-y-2">
                 {KEY_RESOURCES.map(res => (<li key={res.name.en} className="text-gray-600"><span className="font-semibold">{res.name[language]}:</span> {res.contact}</li>))}
             </ul>
@@ -382,53 +378,27 @@ const InfoSection: React.FC<{ language: Language; }> = ({ language }) => (
     </div>
 );
 
-const LoadingAnimation: React.FC<{language: Language}> = ({language}) => {
-    const [currentTipIndex, setCurrentTipIndex] = useState(0);
-
-    useEffect(() => {
-        const timer = setInterval(() => {
-            setCurrentTipIndex(prevIndex => (prevIndex + 1) % LOADING_TIPS.length);
-        }, 3500);
-        return () => clearInterval(timer);
-    }, []);
-
-    return (
-        <div className="flex flex-col items-center justify-center py-8 text-center">
-            <div className="relative h-24 w-24">
-                <div className="absolute inset-0 rounded-full border-4 border-t-transparent border-green-200 animate-spin"></div>
-                <div className="absolute inset-2 rounded-full border-4 border-b-transparent border-teal-300 animate-spin" style={{ animationDirection: 'reverse' }}></div>
-                <div className="absolute inset-0 flex items-center justify-center text-brand-green text-4xl">
-                    <i className="fa-solid fa-seedling"></i>
-                </div>
-            </div>
-            <p className="mt-4 text-gray-600 font-semibold">{language === 'en' ? 'Generating personalized advice...' : 'ব্যক্তিগত পরামর্শ তৈরি করা হচ্ছে...'}</p>
-            <div className="mt-4 text-sm text-brand-gray-700 h-12 flex items-center transition-opacity duration-500">
-                <p key={currentTipIndex} className="animate-fade-in-up">{LOADING_TIPS[currentTipIndex][language]}</p>
-            </div>
-        </div>
-    );
-};
-
-const AIRecommendations: React.FC<{ scores: { [key: string]: number }; assessmentData: Pillar[]; probingAnswers: ProbingAnswers; language: Language; }> = ({ scores, assessmentData, probingAnswers, language }) => {
+const AIRecommendations: React.FC<{ scores: { [key: string]: number }; assessmentData: { domain: Domain; questions: MainQuestion[] }[]; probingAnswers: ProbingAnswers; language: Language; }> = ({ scores, assessmentData, probingAnswers, language }) => {
     const [recommendations, setRecommendations] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    const generateRecommendations = useCallback(async () => {
+    const generateRecommendations = async () => {
         setLoading(true);
         setError('');
         try {
+            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
+
             const lowScoringAnswers = assessmentData
-                .flatMap(p => p.indicators)
-                .filter(indicator => {
-                    const score = scores[indicator.id];
+                .flatMap(p => p.questions)
+                .filter(question => {
+                    const score = scores[question.id];
                     return typeof score === 'number' && score >= 0 && score <= 2;
                 })
-                .map(indicator => {
-                    // FIX: Use a local variable for the score to ensure type safety and improve readability.
-                    const score = scores[indicator.id];
-                    const answer = indicator.scoringGuide.find(sg => sg.score === score);
-                    return `- Question: ${indicator.text.en}\n  - Answer (Score ${score}): ${answer?.description.en}`;
+                .map(question => {
+                    const score = scores[question.id];
+                    const answer = SCORING_OPTIONS.find(sg => sg.score === score);
+                    return `- Question: ${question.text.en}\n  - Answer (Score ${score}): ${answer?.text.en}`;
                 })
                 .join('\n');
             
@@ -443,12 +413,9 @@ const AIRecommendations: React.FC<{ scores: { [key: string]: number }; assessmen
 
 A business has just completed a sustainability assessment. Based on their profile and low-scoring answers below, provide a set of 3-5 actionable, prioritized recommendations in ${language === 'bn' ? 'Bengali' : 'English'}.
 
-For each recommendation:
-1. Provide a clear title.
-2. Explain why it's important for their specific business context.
-3. Suggest the first practical step they can take.
+Crucially, tailor every recommendation specifically to the provided "Business Profile". For example, take into account their sector (e.g., manufacturing vs. service), location (urban vs. rural), their primary customer base, size of the business, and the specific resources they consume. The solutions must be practical and relevant to their specific constraints and context.
 
-Focus on low-cost, high-impact suggestions. **Format the entire response as clean, semantic HTML.** Use \`<h3>\` for recommendation titles, \`<p>\` for paragraphs, and \`<ul>\` with \`<li>\` for any lists. Do not include \`\`\`html or any markdown syntax.
+For each recommendation, explain why it's important and suggest the first practical step they can take. Focus on low-cost, high-impact suggestions. Format the response as Markdown.
 
 Business Profile:
 ${businessProfile}
@@ -456,43 +423,38 @@ ${businessProfile}
 Assessment Results (Areas for Improvement):
 ${lowScoringAnswers}
 
-Now, provide your expert recommendations in HTML format.`;
+Now, provide your expert recommendations tailored to the specific business profile.`;
 
-            const response = await fetch('/.netlify/functions/gemini', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt }),
+            const response = await ai.models.generateContent({
+                model: 'gemini-3.1-pro-preview',
+                contents: prompt,
             });
 
-            const responseBody = await response.json();
-
-            if (!response.ok) {
-                const errorData = (responseBody || {}) as { error?: string };
-                throw new Error(errorData.error || `Request failed with status ${response.status}`);
-            }
-
-            const data = (responseBody || {}) as { text: string };
-            setRecommendations(data.text || '');
-
+            setRecommendations(response.text || '');
         } catch (e) {
             console.error(e);
-            setError(language === 'en' ? 'Failed to generate recommendations. Please try again later.' : 'সুপারিশ তৈরি করতে ব্যর্থ। অনুগ্রহ করে পরে আবার চেষ্টা করুন।');
+            setError(language === 'en' ? 'Failed to generate recommendations. Please try again later.' : 'সুপারিশ তৈরি করতে ব্যর্থ। অনুগ্রহ করে稍পরে আবার চেষ্টা করুন।');
         } finally {
             setLoading(false);
         }
-    }, [scores, assessmentData, probingAnswers, language]);
+    };
 
     useEffect(() => {
         generateRecommendations();
-    }, [generateRecommendations]);
+    }, [assessmentData, scores, probingAnswers, language]);
 
     return (
-        <div className="bg-green-50/50 rounded-xl shadow-lg p-8 my-8 border-t-4 border-brand-teal animate-fade-in-up" style={{animationDelay: '300ms'}}>
-            <h2 className="text-2xl font-bold text-brand-teal mb-4 flex items-center gap-3"><i className="fa-solid fa-robot"></i> {language === 'en' ? 'AI-Generated Recommendations' : 'AI-জেনারেটেড সুপারিশ'}</h2>
-            {loading && <LoadingAnimation language={language} />}
+        <div className="bg-white rounded-xl shadow-lg p-8 my-8">
+            <h2 className="text-2xl font-bold text-green-800 mb-4">{language === 'en' ? 'AI-Generated Recommendations' : 'AI-জেনারেটেড সুপারিশ'}</h2>
+            {loading && (
+                 <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-700"></div>
+                    <p className="ml-4 text-gray-600">{language === 'en' ? 'Generating personalized advice...' : 'ব্যক্তিগত পরামর্শ তৈরি করা হচ্ছে...'}</p>
+                </div>
+            )}
             {error && <p className="text-red-500">{error}</p>}
             {!loading && !error && (
-                <div className="prose prose-green max-w-none" dangerouslySetInnerHTML={{ __html: window.DOMPurify.sanitize(recommendations) }}></div>
+                <div className="prose prose-green max-w-none" dangerouslySetInnerHTML={{ __html: (recommendations || '').replace(/\n/g, '<br />') }}></div>
             )}
         </div>
     );
@@ -500,24 +462,22 @@ Now, provide your expert recommendations in HTML format.`;
 
 const AssessmentProgress: React.FC<{ 
     scores: { [key: string]: number }; 
-    assessmentData: Pillar[]; 
+    assessmentData: { domain: Domain; questions: MainQuestion[] }[]; 
     language: Language; 
-    replacementsLeft: number;
-}> = ({ scores, assessmentData, language, replacementsLeft }) => {
-    const totalQuestions = useMemo(() => assessmentData.flatMap(p => p.indicators).length, [assessmentData]);
-    const answeredQuestions = useMemo(() => Object.values(scores).filter(score => score > -1).length, [scores]);
+}> = ({ scores, assessmentData, language }) => {
+    const totalQuestions = useMemo(() => assessmentData.flatMap(p => p.questions).length, [assessmentData]);
+    const answeredQuestions = useMemo(() => Object.values(scores).filter(score => score > -2).length, [scores]);
     const progressPercentage = totalQuestions > 0 ? (answeredQuestions / totalQuestions) * 100 : 0;
 
     return (
         <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-sm shadow-md p-4 mb-8 rounded-lg">
-            <div className="flex flex-col sm:flex-row justify-between items-center mb-2 text-sm md:text-base gap-2">
-                <h3 className="font-bold text-brand-green-dark">{language === 'en' ? 'Progress' : 'অগ্রগতি'}</h3>
-                <span className="font-semibold text-brand-gray-700">{answeredQuestions} / {totalQuestions} {language === 'en' ? 'Answered' : 'উত্তর'}</span>
-                <span className="font-semibold text-brand-gray-700">{language === 'en' ? 'Replacements Left:' : 'প্রতিস্থাপন বাকি:'} <span className="bg-yellow-200 text-yellow-800 font-bold px-2 py-1 rounded-full">{replacementsLeft}</span></span>
+            <div className="flex justify-between items-center mb-2 text-sm md:text-base">
+                <h3 className="font-bold text-green-800">{language === 'en' ? 'Progress' : 'অগ্রগতি'}</h3>
+                <span className="font-semibold text-gray-700">{answeredQuestions} / {totalQuestions} {language === 'en' ? 'Answered' : 'উত্তর'}</span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+            <div className="w-full bg-gray-200 rounded-full h-4">
                 <div
-                    className="bg-gradient-to-r from-brand-teal to-brand-green h-4 rounded-full transition-all duration-500 ease-out"
+                    className="bg-green-600 h-4 rounded-full transition-all duration-500 ease-out"
                     style={{ width: `${progressPercentage}%` }}
                 ></div>
             </div>
@@ -526,152 +486,120 @@ const AssessmentProgress: React.FC<{
 };
 
 const AssessmentScreen: React.FC<{
-    assessmentData: Pillar[];
-    scores: { [key:string]: number };
+    assessmentData: { domain: Domain; questions: MainQuestion[] }[];
+    scores: { [key: string]: number };
     onScoreChange: (id: string, score: number) => void;
     onComplete: () => void;
     language: Language;
-    replacementsLeft: number;
-    onReplaceQuestion: (pillarId: number, questionId: string) => void;
-    fullRankedQuestions: Indicator[];
-}> = ({ assessmentData, scores, onScoreChange, onComplete, language, replacementsLeft, onReplaceQuestion, fullRankedQuestions }) => {
-    const isComplete = useMemo(() => Object.values(scores).every(score => score > -1), [scores]);
+}> = ({ assessmentData, scores, onScoreChange, onComplete, language }) => {
     
+    const { isComplete, remainingCount } = useMemo(() => {
+        let unanswered = 0;
+        for (const group of assessmentData) {
+            for (const q of group.questions) {
+                if (scores[q.id] === undefined || scores[q.id] === -2) {
+                    unanswered++;
+                }
+            }
+        }
+        return { isComplete: unanswered === 0, remainingCount: unanswered };
+    }, [assessmentData, scores]);
+
     return (
         <>
-            <AssessmentProgress scores={scores} assessmentData={assessmentData} language={language} replacementsLeft={replacementsLeft} />
-            {assessmentData.map((pillar, index) => {
-                const totalRelevantQuestionsForPillar = fullRankedQuestions.filter(q => q.pillarId === pillar.id).length;
-                const canPillarBeReplaced = totalRelevantQuestionsForPillar > pillar.indicators.length;
-                return (
-                    <PillarCard 
-                        key={pillar.id} 
-                        pillar={pillar} 
-                        scores={scores} 
-                        onScoreChange={onScoreChange} 
-                        language={language}
-                        onReplaceQuestion={onReplaceQuestion}
-                        replacementsLeft={replacementsLeft}
-                        canPillarBeReplaced={canPillarBeReplaced}
-                        style={{ animationDelay: `${index * 200}ms` }}
-                    />
-                )
-            })}
-            <button
-                onClick={onComplete}
-                disabled={!isComplete}
-                className="w-full mt-4 py-4 px-6 bg-brand-green text-white font-bold text-lg rounded-lg shadow-lg hover:bg-brand-green-dark disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-3"
-            >
-                <i className="fa-solid fa-chart-pie"></i>
-                {language === 'en' ? 'Finish & See Results' : 'শেষ করুন এবং ফলাফল দেখুন'}
-            </button>
-        </>
-    );
-};
-
-interface PillarScoreData {
-    title: string;
-    score: number;
-    maxScore: number;
-    weight: number;
-    weightedScore: number;
-    pillarId: number;
-}
-
-const pillarColors = [
-  'bg-blue-500', 'bg-purple-500', 'bg-pink-500', 'bg-orange-500', 'bg-indigo-500',
-];
-
-const PillarScoresChart: React.FC<{ pillarScores: PillarScoreData[]; language: Language; }> = ({ pillarScores, language }) => {
-    const [animatedScores, setAnimatedScores] = useState<number[]>([]);
-
-    useEffect(() => {
-        const timeout = setTimeout(() => {
-            setAnimatedScores(pillarScores.map(p => p.weight > 0 ? (p.weightedScore / p.weight) * 100 : 0));
-        }, 100);
-        return () => clearTimeout(timeout);
-    }, [pillarScores]);
-
-    return (
-        <div className="bg-white rounded-xl shadow-lg p-8 my-8 animate-fade-in-up" style={{ animationDelay: '200ms' }}>
-            <h3 className="text-2xl font-bold text-brand-gray-800 mb-6 text-center flex items-center justify-center gap-3">
-                <i className="fa-solid fa-bars-progress"></i> {language === 'en' ? 'Performance by Pillar' : 'স্তম্ভ অনুযায়ী কর্মক্ষমতা'}
-            </h3>
-            <div className="space-y-4">
-                {pillarScores.map((pillar, index) => (
-                    <div key={pillar.title}>
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="font-semibold text-brand-gray-700 flex items-center gap-2">
-                                <i className={`${PILLAR_ICONS[pillar.pillarId]} text-brand-teal`}></i>
-                                {pillar.title}
-                            </span>
-                            <span className="font-bold text-brand-gray-800">{pillar.weightedScore} / {pillar.weight}</span>
-                        </div>
-                        <div className="w-full bg-brand-gray-200 rounded-full h-6 overflow-hidden">
-                            <div
-                                className={`${pillarColors[index % pillarColors.length]} h-6 rounded-full text-white flex items-center justify-center text-sm font-bold transition-all duration-1000 ease-out`}
-                                style={{ width: `${animatedScores[index] || 0}%` }}
-                            >
-                                {Math.round(animatedScores[index] || 0)}%
-                            </div>
-                        </div>
-                    </div>
-                ))}
+            <AssessmentProgress scores={scores} assessmentData={assessmentData} language={language} />
+            {assessmentData.map(group => (
+                <DomainCard 
+                    key={group.domain.code} 
+                    domainGroup={group} 
+                    scores={scores} 
+                    onScoreChange={onScoreChange} 
+                    language={language}
+                />
+            ))}
+            <div className="mt-8 pt-6 border-t border-gray-200">
+                <button
+                    onClick={onComplete}
+                    disabled={!isComplete}
+                    className={`w-full py-4 px-6 font-bold text-xl rounded-xl shadow-md transition-all duration-300 flex items-center justify-center gap-3 ${
+                         isComplete 
+                             ? 'bg-green-600 text-white hover:bg-green-700 hover:shadow-lg transform hover:-translate-y-1' 
+                             : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                    }`}
+                >
+                    {isComplete ? (
+                         <>
+                             <span>{language === 'en' ? 'Finish & See Results' : 'শেষ করুন এবং ফলাফল দেখুন'}</span>
+                             <i className="fa-solid fa-arrow-right"></i>
+                         </>
+                    ) : (
+                         <span>
+                             {language === 'en' 
+                                 ? `Please answer ${remainingCount} more required question${remainingCount !== 1 ? 's' : ''}` 
+                                 : `অনুগ্রহ করে আরও ${remainingCount}টি আবশ্যক প্রশ্নের উত্তর দিন`}
+                         </span>
+                    )}
+                </button>
             </div>
-        </div>
+        </>
     );
 };
 
 const ResultsPage: React.FC<{
     totalScore: number;
     scores: { [key: string]: number };
-    assessmentData: Pillar[];
+    assessmentData: { domain: Domain; questions: MainQuestion[] }[];
     probingAnswers: ProbingAnswers;
     onStartOver: () => void;
     language: Language;
 }> = ({ totalScore, scores, assessmentData, probingAnswers, onStartOver, language }) => {
     const [isExporting, setIsExporting] = useState(false);
     
-    const interpretation = useMemo(() => SCORE_INTERPRETATIONS.find(interp => totalScore >= interp.minScore)!, [totalScore]);
+    // Default to the lowest interpretation if none match
+    const interpretation = useMemo(() => {
+        const found = SCORE_INTERPRETATIONS.find(interp => totalScore >= interp.minScore);
+        return found || SCORE_INTERPRETATIONS[SCORE_INTERPRETATIONS.length - 1];
+    }, [totalScore]);
 
-    const pillarScores = useMemo(() => {
-        return assessmentData.map(pillar => {
-            const pillarScore = pillar.indicators.reduce((acc, ind) => {
-                const score = scores[ind.id];
-                return acc + (typeof score === 'number' && score > -1 ? score : 0);
-            }, 0);
-            const maxPillarScore = pillar.indicators.reduce((acc, ind) => acc + ind.maxScore, 0);
-            const weightedScore = maxPillarScore > 0 ? (pillarScore / maxPillarScore) * pillar.points : 0;
+    const domainScores = useMemo(() => {
+        return assessmentData.map(group => {
+            let sumScore = 0;
+            let sumMax = 0;
+            group.questions.forEach(q => {
+               const score = scores[q.id];
+               if (score > -1 && q.weightPriority !== 'Pathway') {
+                   const weight = getWeightNumber(q.weightPriority);
+                   sumScore += (score * weight);
+                   sumMax += (4 * weight);
+               }
+            });
+            const percent = sumMax > 0 ? Math.round((sumScore / sumMax) * 100) : 0;
             return {
-                title: pillar.title[language],
-                score: pillarScore,
-                maxScore: maxPillarScore,
-                weight: pillar.points,
-                weightedScore: Math.round(weightedScore),
-                pillarId: pillar.id,
+                title: group.domain.name[language],
+                score: sumScore,
+                maxScore: sumMax,
+                percent,
             };
         });
     }, [assessmentData, scores, language]);
 
     const handleExportCSV = () => {
         const headers = [
-            language === 'en' ? 'Category' : 'বিভাগ',
-            language === 'en' ? 'Pillar' : 'স্তম্ভ',
+            language === 'en' ? 'Domain' : 'বিভাগ',
             language === 'en' ? 'Score' : 'স্কোর',
             language === 'en' ? 'Max Score' : 'সর্বোচ্চ স্কোর',
-            language === 'en' ? 'Weighted Score' : 'ভারিত স্কোর',
-            language === 'en' ? 'Pillar Weight' : 'স্তম্ভের গুরুত্ব',
+            language === 'en' ? 'Percentage' : 'শতাংশ',
         ];
     
         let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n";
     
-        pillarScores.forEach(p => {
-            csvContent += `Pillar Score,"${p.title}",${p.score},${p.maxScore},${p.weightedScore},${p.weight}\n`;
+        domainScores.forEach(d => {
+            csvContent += `"${d.title}",${d.score},${d.maxScore},${d.percent}%\n`;
         });
     
         csvContent += "\n";
-        csvContent += `Final Result,"Total Score",${totalScore},100,${totalScore},100\n`;
-        csvContent += `Final Result,"Rating","${interpretation.rating.level[language]}","","",""\n`;
+        csvContent += `Final Result,"Total Score",${totalScore}%,100%\n`;
+        csvContent += `Final Result,"Rating","${interpretation.rating.level[language]}",""\n`;
     
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
@@ -694,6 +622,7 @@ const ResultsPage: React.FC<{
         setIsExporting(true);
 
         setTimeout(() => {
+            // FIX: Use window.html2canvas as it's defined on the window object.
             window.html2canvas(input, { scale: 2, useCORS: true, logging: false }).then(canvas => {
                 const imgData = canvas.toDataURL('image/png');
                 const pdf = new jsPDF('p', 'mm', 'a4');
@@ -727,24 +656,23 @@ const ResultsPage: React.FC<{
         <div className="max-w-4xl mx-auto">
             <div id="results-page-content">
                 <ResultsSummaryCard totalScore={totalScore} language={language} />
-                <PillarScoresChart pillarScores={pillarScores} language={language} />
                 <AIRecommendations scores={scores} assessmentData={assessmentData} probingAnswers={probingAnswers} language={language} />
                 <InfoSection language={language} />
             </div>
 
             {!isExporting && (
-                <div className="mt-8 space-y-4 animate-fade-in-up" style={{animationDelay: '500ms'}}>
+                <div className="mt-8 space-y-4">
                      <div className="flex flex-col md:flex-row gap-4">
                         <button
                             onClick={handleExportPDF}
-                            className="w-full py-3 px-6 bg-red-600 text-white font-bold text-lg rounded-lg shadow-md hover:bg-red-700 transition-all duration-300 flex items-center justify-center gap-2 transform hover:scale-105"
+                            className="w-full py-3 px-6 bg-red-600 text-white font-bold text-lg rounded-lg shadow-md hover:bg-red-700 transition-colors duration-300 flex items-center justify-center gap-2"
                         >
                             <i className="fa-solid fa-file-pdf"></i>
                             {language === 'en' ? 'Export PDF' : 'পিডিএফ এক্সপোর্ট'}
                         </button>
                         <button
                             onClick={handleExportCSV}
-                            className="w-full py-3 px-6 bg-brand-green text-white font-bold text-lg rounded-lg shadow-md hover:bg-brand-green-dark transition-all duration-300 flex items-center justify-center gap-2 transform hover:scale-105"
+                            className="w-full py-3 px-6 bg-green-600 text-white font-bold text-lg rounded-lg shadow-md hover:bg-green-700 transition-colors duration-300 flex items-center justify-center gap-2"
                         >
                             <i className="fa-solid fa-file-csv"></i>
                             {language === 'en' ? 'Export CSV' : 'সিএসভি এক্সপোর্ট'}
@@ -752,17 +680,11 @@ const ResultsPage: React.FC<{
                     </div>
                     <button
                         onClick={onStartOver}
-                        className="w-full py-3 px-6 bg-brand-gray-700 text-white font-bold text-lg rounded-lg shadow-md hover:bg-brand-gray-800 transition-all duration-300 flex items-center justify-center gap-2 transform hover:scale-105"
+                        className="w-full py-3 px-6 bg-gray-600 text-white font-bold text-lg rounded-lg shadow-md hover:bg-gray-700 transition-colors duration-300 flex items-center justify-center gap-2"
                     >
                         <i className="fa-solid fa-rotate-right"></i>
                         {language === 'en' ? 'Start Over' : 'আবার শুরু করুন'}
                     </button>
-                </div>
-            )}
-            {isExporting && (
-                <div className="text-center p-8 text-brand-gray-700 font-semibold">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-green mx-auto"></div>
-                    <p className="mt-4">{language === 'en' ? 'Generating PDF...' : 'পিডিএফ তৈরি করা হচ্ছে...'}</p>
                 </div>
             )}
         </div>
@@ -772,111 +694,131 @@ const ResultsPage: React.FC<{
 
 // --- Main App Component ---
 export default function App() {
-  type View = 'probing' | 'assessment' | 'results';
   const [language, setLanguage] = useState<Language>('en');
-  const [view, setView] = useState<View>('probing');
-  const [isFadingOut, setIsFadingOut] = useState(false);
-  const [assessmentData, setAssessmentData] = useState<Pillar[] | null>(null);
+  const [view, setView] = useState<'probing' | 'assessment' | 'results'>('probing');
+  const [assessmentData, setAssessmentData] = useState<{ domain: Domain; questions: MainQuestion[] }[] | null>(null);
   const [scores, setScores] = useState<{ [key: string]: number }>({});
   const [probingAnswers, setProbingAnswers] = useState<ProbingAnswers>({});
-  const [replacementsLeft, setReplacementsLeft] = useState(5);
-  const [fullRankedQuestions, setFullRankedQuestions] = useState<Indicator[]>([]);
 
-  const changeView = (newView: View, stateResetter?: () => void) => {
-    setIsFadingOut(true);
-    setTimeout(() => {
-        if (stateResetter) stateResetter();
-        setView(newView);
-        setIsFadingOut(false);
-    }, 400); // Match fade-out animation duration
-  };
+  // Load progress from localStorage on mount
+  useEffect(() => {
+    const savedProgress = localStorage.getItem('green_business_assessment_progress');
+    if (savedProgress) {
+        try {
+            const parsed = JSON.parse(savedProgress);
+            if (parsed.view) setView(parsed.view);
+            if (parsed.assessmentData) setAssessmentData(parsed.assessmentData);
+            if (parsed.scores) setScores(parsed.scores);
+            if (parsed.probingAnswers) setProbingAnswers(parsed.probingAnswers);
+            if (parsed.language) setLanguage(parsed.language);
+        } catch (e) {
+            console.error("Failed to load progress from localStorage", e);
+        }
+    }
+  }, []);
+
+  // Save progress to localStorage whenever relevant state changes
+  useEffect(() => {
+    const progress = {
+        view,
+        assessmentData,
+        scores,
+        probingAnswers,
+        language
+    };
+    localStorage.setItem('green_business_assessment_progress', JSON.stringify(progress));
+  }, [view, assessmentData, scores, probingAnswers, language]);
 
   const handleProbingComplete = useCallback((answers: ProbingAnswers) => {
-    const { fullRankedQuestions: ranked, initialAssessment } = generateCustomAssessmentData(answers);
-    const allIndicators = initialAssessment.flatMap(p => p.indicators);
+    const { applicableQuestions, groupedByDomain } = generateCustomAssessmentData(answers);
     
-    setFullRankedQuestions(ranked);
-    setScores(getInitialScores(allIndicators));
-    setAssessmentData(initialAssessment);
+    setScores(getInitialScores(applicableQuestions));
+    setAssessmentData(groupedByDomain);
     setProbingAnswers(answers);
-    setReplacementsLeft(5);
-    changeView('assessment');
+    setView('assessment');
   }, []);
 
-  const handleScoreChange = useCallback((indicatorId: string, score: number) => {
-    setScores(prevScores => ({ ...prevScores, [indicatorId]: score }));
+  const handleScoreChange = useCallback((id: string, score: number) => {
+    setScores(prevScores => ({ ...prevScores, [id]: score }));
   }, []);
   
-  const handleReplaceQuestion = useCallback((pillarId: number, questionIdToReplace: string) => {
-    if (replacementsLeft <= 0) return;
-
-    const pillarRankedQuestions = fullRankedQuestions.filter(q => q.pillarId === pillarId);
-    const currentPillar = assessmentData?.find(p => p.id === pillarId);
-    if (!currentPillar) return;
-
-    const currentIndicatorIds = new Set(currentPillar.indicators.map(i => i.id));
-    
-    const newQuestion = pillarRankedQuestions.find(q => !currentIndicatorIds.has(q.id));
-
-    if (newQuestion) {
-        setAssessmentData(prevData => {
-            if (!prevData) return null;
-            return prevData.map(p => {
-                if (p.id === pillarId) {
-                    return {
-                        ...p,
-                        indicators: p.indicators.map(ind => ind.id === questionIdToReplace ? newQuestion : ind)
-                    };
-                }
-                return p;
-            });
-        });
-
-        setScores(prevScores => {
-            const newScores = { ...prevScores };
-            delete newScores[questionIdToReplace];
-            newScores[newQuestion.id] = -1;
-            return newScores;
-        });
-        
-        setReplacementsLeft(prev => prev - 1);
-    } else {
-        alert(language === 'en' ? 'No more relevant questions available for this section.' : 'এই বিভাগের জন্য আর কোনো প্রাসঙ্গিক প্রশ্ন উপলব্ধ নেই।');
-    }
-}, [replacementsLeft, fullRankedQuestions, assessmentData, language]);
-
-
-  const handleAssessmentComplete = useCallback(() => {
-    changeView('results');
-  }, []);
-
-  const handleStartOver = useCallback(() => {
-    const resetter = () => {
-        setAssessmentData(null);
-        setScores({});
-        setProbingAnswers({});
-        setReplacementsLeft(5);
-        setFullRankedQuestions([]);
-    };
-    changeView('probing', resetter);
-  }, []);
+  const { currentUser, userProfile, signInWithGoogle, logout } = useAuth();
 
   const totalScore = useMemo(() => {
     if (!assessmentData) return 0;
-    const finalScore = assessmentData.reduce((total, pillar) => {
-        const pillarScore = pillar.indicators.reduce((acc, ind) => {
-            const score = scores[ind.id];
-            return acc + (typeof score === 'number' && score > -1 ? score : 0);
-        }, 0);
-        const maxPillarScore = pillar.indicators.reduce((acc, ind) => acc + ind.maxScore, 0);
-        if (maxPillarScore === 0) return total;
-        const normalizedPillarScore = (pillarScore / maxPillarScore) * pillar.points;
-        return total + normalizedPillarScore;
-    }, 0);
-    return Math.round(finalScore);
+    
+    let sumScore = 0;
+    let sumMax = 0;
+    
+    assessmentData.forEach(group => {
+        group.questions.forEach(q => {
+            const score = scores[q.id];
+            if (score > -1 && q.weightPriority !== 'Pathway') {
+                const weight = getWeightNumber(q.weightPriority);
+                sumScore += (score * weight);
+                sumMax += (4 * weight);
+            }
+        });
+    });
+
+    return sumMax > 0 ? Math.round((sumScore / sumMax) * 100) : 0;
   }, [scores, assessmentData]);
 
+  const handleAssessmentComplete = async () => {
+    if (currentUser) {
+      try {
+        await addDoc(collection(db, 'assessments'), {
+          enumeratorId: currentUser.uid,
+          createdAt: serverTimestamp(),
+          probingAnswers: probingAnswers,
+          scores: scores,
+          totalScore: totalScore
+        });
+      } catch (err) {
+        console.error("Failed to save assessment to database:", err);
+      }
+    }
+    setView('results');
+  };
+
+  const handleStartOver = useCallback(() => {
+    setView('probing');
+    setAssessmentData(null);
+    setScores({});
+    setProbingAnswers({});
+    localStorage.removeItem('green_business_assessment_progress');
+  }, []);
+
   const renderContent = () => {
+    if (!currentUser) {
+      return (
+        <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl shadow-lg mt-8">
+          <h2 className="text-3xl font-bold mb-4 text-green-800">{language === 'en' ? 'Welcome to Green Business Assessment Tool' : 'সবুজ ব্যবসায়িক মূল্যায়ন সরঞ্জামে স্বাগতম'}</h2>
+          <p className="text-gray-600 mb-8 max-w-lg text-center text-lg">
+            {language === 'en' 
+              ? 'Please sign in to start entering assessment data.' 
+              : 'মূল্যায়ন ডেটা প্রবেশ করতে অনুগ্রহ করে সাইন ইন করুন।'}
+          </p>
+          <button onClick={signInWithGoogle} className="px-8 py-4 bg-green-600 text-white font-bold rounded-lg shadow-md hover:bg-green-700 transition flex items-center justify-center gap-3">
+            <i className="fa-brands fa-google text-xl"></i>
+            {language === 'en' ? 'Sign in with Google' : 'Google দিয়ে সাইন ইন করুন'}
+          </button>
+        </div>
+      );
+    }
+
+    if (userProfile?.role === 'admin' && view === 'probing' && Object.keys(probingAnswers).length === 0) {
+       return (
+         <div className="space-y-12">
+           <AdminDashboard />
+           <div className="border-t-4 border-green-200 pt-8 text-center max-w-3xl mx-auto">
+              <h3 className="text-3xl font-bold text-gray-800 mb-6">{language === 'en' ? 'Or Start New Assessment' : 'অথবা নতুন মূল্যায়ন শুরু করুন'}</h3>
+           </div>
+           <ProbingQuestionsForm onComplete={handleProbingComplete} language={language} />
+         </div>
+       );
+    }
+
     switch (view) {
         case 'probing':
             return <ProbingQuestionsForm onComplete={handleProbingComplete} language={language} />;
@@ -887,9 +829,6 @@ export default function App() {
                 onScoreChange={handleScoreChange} 
                 onComplete={handleAssessmentComplete} 
                 language={language}
-                replacementsLeft={replacementsLeft}
-                onReplaceQuestion={handleReplaceQuestion}
-                fullRankedQuestions={fullRankedQuestions}
             />;
         case 'results':
             return assessmentData && <ResultsPage 
@@ -906,22 +845,49 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen text-brand-gray-800 font-sans">
-       <header className="relative text-white p-6 shadow-md h-64 flex items-center justify-center text-center bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1593113633219-bc0741916323?q=80&w=2070&auto=format&fit=crop')" }}>
-          <div className="absolute inset-0 bg-brand-green/70"></div>
-          <div className="relative container mx-auto">
-              <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-shadow-lg">{language === 'en' ? 'Green Business Assessment Tool' : 'সবুজ ব্যবসায়িক মূল্যায়ন সরঞ্জাম'}</h1>
-              <p className="text-lg md:text-xl mt-2 opacity-90 text-shadow-md">{language === 'en' ? 'For Bangladeshi SMEs' : 'বাংলাদেশের ছোট ও মাঝারি শিল্পের জন্য'}</p>
-          </div>
-          <LanguageSwitcher language={language} setLanguage={setLanguage} />
+    <div className="min-h-screen bg-gray-50 text-gray-800 font-sans">
+      <header className="bg-green-700 text-white p-6 shadow-md relative">
+        <div className="container mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="text-center md:text-left">
+                <h1 className="text-3xl md:text-4xl font-extrabold">{language === 'en' ? 'Green Business Assessment Tool' : 'সবুজ ব্যবসায়িক মূল্যায়ন সরঞ্জাম'}</h1>
+                <p className="text-lg mt-2 opacity-90">{language === 'en' ? 'For Bangladeshi SMEs' : 'বাংলাদেশের ছোট ও মাঝারি শিল্পের জন্য'}</p>
+            </div>
+            
+            <div className="flex items-center gap-4">
+               {currentUser && (
+                  <div className="flex items-center gap-4 bg-green-800/50 px-4 py-2 rounded-full border border-green-600">
+                    <div className="flex flex-col text-sm text-right">
+                       <span className="font-bold">{currentUser.displayName || currentUser.email}</span>
+                       <span className="text-green-200 capitalize">{userProfile?.role || 'User'}</span>
+                    </div>
+                    <button 
+                       onClick={logout}
+                       className="p-2 text-red-300 hover:text-red-100 transition-colors"
+                       title="Logout"
+                    >
+                       <i className="fa-solid fa-right-from-bracket text-xl"></i>
+                    </button>
+                  </div>
+               )}
+               <div className="static md:relative">
+                 <button
+                   onClick={() => setLanguage(language === 'en' ? 'bn' : 'en')}
+                   className="px-4 py-2 bg-white text-green-700 font-semibold rounded-full shadow hover:bg-green-50 transition flex items-center gap-2"
+                 >
+                   <i className="fa-solid fa-language"></i>
+                   {language === 'en' ? 'বাংলা' : 'English'}
+                 </button>
+               </div>
+            </div>
+        </div>
       </header>
 
-      <main className={`container mx-auto p-4 lg:p-8 -mt-20 relative z-10 transition-opacity duration-300 ${isFadingOut ? 'animate-fade-out' : ''}`}>
+      <main className="container mx-auto p-4 lg:p-8">
         {renderContent()}
       </main>
       
-      <footer className="bg-brand-gray-800 text-white text-center p-4 mt-8">
-          <p>&copy; 2024 Sustainable Business Research Bangladesh. Version 4.0</p>
+      <footer className="bg-green-800 text-white text-center p-4 mt-8">
+          <p>&copy; 2024 Sustainable Business Research Bangladesh. Version 3.1</p>
       </footer>
     </div>
   );

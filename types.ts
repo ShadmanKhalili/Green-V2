@@ -61,18 +61,30 @@ export interface ProbingQuestionOption {
 
 export interface ProbingQuestion {
     id: string;
-    type: 'select' | 'checkbox';
+    backendTag: string;
+    type: 'text' | 'select' | 'checkbox';
     text: LocalizedString;
-    options: ProbingQuestionOption[];
+    options?: ProbingQuestionOption[];
+    dependsOn?: (answers: ProbingAnswers) => boolean;
 }
 
 export interface ProbingAnswers {
     [key: string]: string | string[];
 }
 
-// --- New type for loading tips ---
+export type WeightPriority = 'Very High' | 'High' | 'Medium' | 'Low' | 'Pathway';
 
-export interface LoadingTip {
-  en: string;
-  bn: string;
+export interface MainQuestion {
+    id: string;
+    text: LocalizedString;
+    domain: string;
+    weightPriority: WeightPriority;
+    evidenceExamples?: LocalizedString;
+    financeLink?: LocalizedString;
+    routingCondition: (answers: ProbingAnswers) => boolean;
+}
+
+export interface Domain {
+    code: string;
+    name: LocalizedString;
 }

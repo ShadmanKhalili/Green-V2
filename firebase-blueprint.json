@@ -1,0 +1,75 @@
+{
+  "entities": {
+    "userProfile": {
+      "title": "User Profile",
+      "description": "Information about a user in the system.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "The user's email address."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["enumerator", "admin"],
+          "description": "The user's role."
+        },
+        "name": {
+          "type": "string",
+          "description": "The user's display name."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["email", "role", "createdAt"]
+    },
+    "assessment": {
+      "title": "Business Assessment",
+      "description": "An assessment filled out by an enumerator for a business.",
+      "type": "object",
+      "properties": {
+        "enumeratorId": {
+          "type": "string",
+          "description": "The UID of the user who submitted this assessment."
+        },
+        "businessInfo": {
+          "type": "object",
+          "description": "Basic info about the business (from the primary set of questions)."
+        },
+        "probingAnswers": {
+          "type": "object",
+          "description": "Answers to the probing questions."
+        },
+        "scores": {
+          "type": "object",
+          "description": "The scores for the answered questions."
+        },
+        "totalScore": {
+          "type": "number",
+          "description": "The final total score percentage."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["enumeratorId", "createdAt", "totalScore", "scores", "probingAnswers"]
+    }
+  },
+  "firestore": {
+    "/userProfiles/{userId}": {
+      "schema": {
+        "$ref": "#/entities/userProfile"
+      },
+      "description": "Stores user profiles."
+    },
+    "/assessments/{assessmentId}": {
+      "schema": {
+        "$ref": "#/entities/assessment"
+      },
+      "description": "Stores assessments submitted by our users."
+    }
+  }
+}
