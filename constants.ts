@@ -20,19 +20,7 @@ export const SCORING_OPTIONS = [
 
 export const PROBING_QUESTIONS: ProbingQuestion[] = [
     { id: 'P1', backendTag: 'business_name', type: 'text', text: { en: 'What is the name of your business?', bn: 'আপনার ব্যবসার নাম কি?' } },
-    { id: 'P2', backendTag: 'location_division_district', type: 'select', text: { en: 'Where is your business mainly located?', bn: 'আপনার ব্যবসা প্রধানত কোথায় অবস্থিত?' }, options: [
-        { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
-        { value: 'Dhaka', text: { en: 'Dhaka', bn: 'ঢাকা' } },
-        { value: 'Chattogram', text: { en: 'Chattogram', bn: 'চট্টগ্রাম' } },
-        { value: 'Rajshahi', text: { en: 'Rajshahi', bn: 'রাজশাহী' } },
-        { value: 'Khulna', text: { en: 'Khulna', bn: 'খুলনা' } },
-        { value: 'Barishal', text: { en: 'Barishal', bn: 'বরিশাল' } },
-        { value: 'Sylhet', text: { en: 'Sylhet', bn: 'সিলেট' } },
-        { value: 'Rangpur', text: { en: 'Rangpur', bn: 'রংপুর' } },
-        { value: 'Mymensingh', text: { en: 'Mymensingh', bn: 'ময়মনসিংহ' } },
-        { value: 'Other district', text: { en: 'Other district', bn: 'অন্যান্য জেলা' } },
-        { value: 'Mobile / no fixed business location', text: { en: 'Mobile / no fixed business location', bn: 'মোবাইল / কোনো নির্দিষ্ট অবস্থান নেই' } }
-    ]},
+    { id: 'P2', backendTag: 'location_division_district', type: 'location', text: { en: 'Where is your business mainly located?', bn: 'আপনার ব্যবসা প্রধানত কোথায় অবস্থিত?' } },
     { id: 'P3', backendTag: 'business_premise_type', type: 'select', text: { en: 'Which option best describes where your business operates?', bn: 'কোন বিকল্পটি আপনার ব্যবসার অবস্থান সবচেয়ে ভালোভাবে বর্ণনা করে?' }, options: [
         { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
         { value: 'Home-based business', text: { en: 'Home-based business', bn: 'বাড়ি-ভিত্তিক ব্যবসা' } },

@@ -6,11 +6,16 @@ import { MAIN_QUESTIONS, DOMAINS } from './questionBank';
 import { SCORING_OPTIONS, PROBING_QUESTIONS, SCORE_INTERPRETATIONS, SECTOR_BENCHMARKS, KEY_RESOURCES } from './constants';
 import { GoogleGenAI } from "@google/genai";
 import { useAuth } from './AuthContext';
-import { AdminDashboard } from './src/AdminDashboard';
+const AdminDashboard = React.lazy(() => import('./src/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const SustainabilityAssistant = React.lazy(() => import('./src/components/SustainabilityAssistant').then(m => ({ default: m.SustainabilityAssistant })));
+import { getQuestionHelp } from './src/services/geminiService';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import Markdown from 'react-markdown';
+import { LocationPicker } from './src/components/LocationPicker';
+import { EvidenceUploader } from './src/components/EvidenceUploader';
+import { SignaturePad } from './src/components/SignaturePad';
 import { 
     ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
     RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar 
@@ -54,6 +59,66 @@ const getWeightNumber = (priority: WeightPriority): number => {
         case 'Pathway': return 0; // Exclude from core score 
         default: return 1;
     }
+};
+
+const AIHelpButton: React.FC<{ questionText: string, language: Language }> = ({ questionText, language }) => {
+    const [helpText, setHelpText] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [showPopover, setShowPopover] = useState(false);
+
+    const handleGetHelp = async () => {
+        if (helpText) {
+            setShowPopover(!showPopover);
+            return;
+        }
+        setLoading(true);
+        setShowPopover(true);
+        const text = await getQuestionHelp(questionText, language);
+        setHelpText(text);
+        setLoading(false);
+    };
+
+    return (
+        <div className="relative inline-block ml-2">
+            <button 
+                onClick={handleGetHelp}
+                className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                    showPopover ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-400 hover:bg-indigo-100 hover:text-indigo-600'
+                }`}
+                title="AI Support"
+            >
+                <i className={`fa-solid ${loading ? 'fa-circle-notch animate-spin' : 'fa-brain'} text-[10px]`}></i>
+            </button>
+            <AnimatePresence>
+                {showPopover && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                        className="absolute left-0 bottom-full mb-3 w-64 p-4 bg-gray-900 text-white rounded-2xl shadow-2xl z-50 text-xs leading-relaxed border border-white/10"
+                    >
+                        <div className="flex items-center gap-2 mb-2 text-indigo-300 font-black uppercase tracking-widest text-[9px]">
+                            <i className="fa-solid fa-wand-magic-sparkles"></i>
+                            AI Insight
+                        </div>
+                        {loading ? (
+                            <div className="flex gap-1 py-1">
+                                <div className="w-1 h-1 bg-white/30 rounded-full animate-bounce"></div>
+                                <div className="w-1 h-1 bg-white/30 rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                                <div className="w-1 h-1 bg-white/30 rounded-full animate-bounce [animation-delay:0.4s]"></div>
+                            </div>
+                        ) : (
+                            <p>{helpText}</p>
+                        )}
+                        <div className="absolute -bottom-1.5 left-2.5 w-3 h-3 bg-gray-900 rotate-45 border-r border-b border-white/10"></div>
+                        <button onClick={() => setShowPopover(false)} className="absolute top-2 right-2 text-white/30 hover:text-white">
+                            <i className="fa-solid fa-xmark text-[10px]"></i>
+                        </button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
 };
 
 const generateCustomAssessmentData = (answers: ProbingAnswers) => {
@@ -127,6 +192,13 @@ const ProbingQuestionComponent: React.FC<{ index: number; question: ProbingQuest
                         {question.options.map(opt => <option key={opt.value} value={opt.value}>{opt.text[language]}</option>)}
                     </select>
                 )}
+                {question.type === 'location' && (
+                    <LocationPicker 
+                        value={value as string} 
+                        onChange={(val) => onChange(question.id, val)}
+                        language={language}
+                    />
+                )}
                 {question.type === 'checkbox' && question.options && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {question.options.map(opt => {
@@ -164,7 +236,49 @@ const ProbingQuestionComponent: React.FC<{ index: number; question: ProbingQuest
 };
 
 const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => void; language: Language; isAdmin?: boolean; }> = ({ onComplete, language, isAdmin }) => {
-    const [answers, setAnswers] = useState<ProbingAnswers>({});
+    const [answers, setAnswers] = useState<ProbingAnswers>(() => {
+        let initialAnswers: ProbingAnswers = {};
+        const saved = localStorage.getItem('sme_probing_draft');
+        if (saved) {
+            try {
+                initialAnswers = JSON.parse(saved);
+            } catch (e) {
+                initialAnswers = {};
+            }
+        }
+        
+        // Pre-fill from URL params
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            let hasUrlParams = false;
+            for (const [key, value] of params.entries()) {
+                if (key.startsWith('P')) {
+                    // It's a probing question, check if it exists in PROBING_QUESTIONS
+                    initialAnswers[key] = value;
+                    hasUrlParams = true;
+                }
+            }
+            if (hasUrlParams) {
+                // Clear the URL to avoid keeping it there
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        }
+        
+        return initialAnswers;
+    });
+    const [currentPage, setCurrentPage] = useState(() => {
+        const saved = localStorage.getItem('sme_probing_page');
+        if (saved) return parseInt(saved, 10);
+        return 1;
+    });
+
+    useEffect(() => {
+        localStorage.setItem('sme_probing_draft', JSON.stringify(answers));
+    }, [answers]);
+
+    useEffect(() => {
+        localStorage.setItem('sme_probing_page', currentPage.toString());
+    }, [currentPage]);
 
     const handleAnswerChange = (id: string, value: any) => {
         setAnswers(prev => ({ ...prev, [id]: value }));
@@ -197,24 +311,55 @@ const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => 
              }
         });
         setAnswers(dummyAnswers);
+        setCurrentPage(2);
     };
 
-    const visibleQuestions = useMemo(() => {
-        return PROBING_QUESTIONS.filter(q => {
+    const questionsPage1 = useMemo(() => PROBING_QUESTIONS.slice(0, 7), []);
+    const questionsPage2 = useMemo(() => PROBING_QUESTIONS.slice(7), []);
+
+    const visibleQuestionsPage1 = useMemo(() => {
+        return questionsPage1.filter(q => {
             if (!q.dependsOn) return true;
             return q.dependsOn(answers);
         });
-    }, [answers]);
+    }, [answers, questionsPage1]);
 
-    const requiredQuestions = useMemo(() => visibleQuestions.filter(q => q.type === 'select' || q.type === 'text'), [visibleQuestions]);
-    const answeredCount = useMemo(() => requiredQuestions.filter(q => {
+    const visibleQuestionsPage2 = useMemo(() => {
+        return questionsPage2.filter(q => {
+            if (!q.dependsOn) return true;
+            return q.dependsOn(answers);
+        });
+    }, [answers, questionsPage2]);
+
+    const requiredPage1 = useMemo(() => visibleQuestionsPage1.filter(q => ['select', 'text', 'location'].includes(q.type)), [visibleQuestionsPage1]);
+    const answeredCountPage1 = useMemo(() => requiredPage1.filter(q => {
         const val = answers[q.id];
         if (!val || val === 'default') return false;
         if (typeof val === 'string' && val.trim() === '') return false;
         return true;
-    }).length, [answers, requiredQuestions]);
-    const isComplete = answeredCount === requiredQuestions.length;
-    const remainingCount = requiredQuestions.length - answeredCount;
+    }).length, [answers, requiredPage1]);
+    const isPage1Complete = answeredCountPage1 === requiredPage1.length;
+    const remainingCountPage1 = requiredPage1.length - answeredCountPage1;
+
+    const requiredPage2 = useMemo(() => visibleQuestionsPage2.filter(q => ['select', 'text', 'location'].includes(q.type)), [visibleQuestionsPage2]);
+    const answeredCountPage2 = useMemo(() => requiredPage2.filter(q => {
+        const val = answers[q.id];
+        if (!val || val === 'default') return false;
+        if (typeof val === 'string' && val.trim() === '') return false;
+        return true;
+    }).length, [answers, requiredPage2]);
+    const isPage2Complete = answeredCountPage2 === requiredPage2.length;
+    const remainingCountPage2 = requiredPage2.length - answeredCountPage2;
+
+    const currentVisibleQuestions = currentPage === 1 ? visibleQuestionsPage1 : visibleQuestionsPage2;
+    const currentAnsweredCount = currentPage === 1 ? answeredCountPage1 : answeredCountPage2;
+    const currentRequiredCount = currentPage === 1 ? requiredPage1.length : requiredPage2.length;
+    const currentRemainingCount = currentPage === 1 ? remainingCountPage1 : remainingCountPage2;
+    const isCurrentPageComplete = currentPage === 1 ? isPage1Complete : isPage2Complete;
+
+    // Use total counts for progress bar
+    const totalRequired = requiredPage1.length + requiredPage2.length;
+    const totalAnswered = answeredCountPage1 + answeredCountPage2;
 
     return (
         <motion.div 
@@ -227,7 +372,7 @@ const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => 
                 <div className="absolute top-0 left-0 w-full h-1.5 bg-gray-100">
                     <div 
                         className="h-full bg-green-500 transition-all duration-700 ease-out"
-                        style={{ width: `${requiredQuestions.length > 0 ? (answeredCount / requiredQuestions.length) * 100 : 0}%` }}
+                        style={{ width: `${totalRequired > 0 ? (totalAnswered / totalRequired) * 100 : 0}%` }}
                     ></div>
                 </div>
 
@@ -240,49 +385,93 @@ const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => 
                     )}
                 </div>
                 <p className="text-center sm:text-left text-gray-500 mb-8 text-lg font-medium">{language === 'en' ? 'Your answers help us tailor the assessment to your specific context.' : 'আপনার উত্তর আমাদের একটি ব্যক্তিগত মূল্যায়ন তৈরি করতে সাহায্য করবে।'}</p>
-                <div className="flex justify-center sm:justify-start mb-8">
+                <div className="flex justify-center sm:justify-start mb-8 gap-4 items-center">
                     <span className="inline-flex items-center gap-2 px-4 py-1.5 bg-green-50 text-green-700 text-sm font-bold rounded-full border border-green-100 shadow-sm">
                         <span className="relative flex h-2 w-2">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                           <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                         </span>
-                        {answeredCount} / {requiredQuestions.length} {language === 'en' ? 'Completed' : 'সম্পন্ন হয়েছে'}
+                        {totalAnswered} / {totalRequired} {language === 'en' ? 'Total Completed' : 'মোট সম্পন্ন হয়েছে'}
+                    </span>
+                    <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">
+                        {language === 'en' ? `Page ${currentPage} of 2` : `পৃষ্ঠা ২ এর ${currentPage}`}
                     </span>
                 </div>
                 
                 <div className="space-y-4">
-                    {visibleQuestions.map((q, index) => {
-                        const isRequired = q.type === 'select' || q.type === 'text';
+                    {currentVisibleQuestions.map((q, index) => {
+                        const isRequired = ['select', 'text', 'location'].includes(q.type);
+                        const displayIndex = currentPage === 1 ? index + 1 : visibleQuestionsPage1.length + index + 1;
                         return (
-                            <ProbingQuestionComponent key={q.id} index={index + 1} question={q} value={answers[q.id] || (q.type === 'checkbox' ? [] : (q.type === 'select' ? 'default' : ''))} onChange={handleAnswerChange} language={language} isRequired={isRequired} />
+                            <ProbingQuestionComponent key={q.id} index={displayIndex} question={q} value={answers[q.id] || (q.type === 'checkbox' ? [] : (q.type === 'select' ? 'default' : ''))} onChange={handleAnswerChange} language={language} isRequired={isRequired} />
                         )
                     })}
                 </div>
-                <div className="mt-8 pt-6 border-t border-gray-100">
-                    <button 
-                        onClick={() => onComplete(answers)}
-                        disabled={!isComplete}
-                        className={`w-full py-4 px-6 font-bold text-xl rounded-xl shadow-md transition-all duration-300 flex items-center justify-center gap-3 ${
-                            isComplete 
-                                ? 'bg-green-600 text-white hover:bg-green-700 hover:shadow-lg transform hover:-translate-y-1' 
-                                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                        }`}
-                    >
-                        {isComplete ? (
-                            <>
-                                <span>{language === 'en' ? 'Generate My Assessment' : 'আমার মূল্যায়ন তৈরি করুন'}</span>
-                                <i className="fa-solid fa-arrow-right"></i>
-                            </>
-                        ) : (
-                            <>
-                                <span>
-                                    {language === 'en' 
-                                        ? `Please answer ${remainingCount} more required question${remainingCount !== 1 ? 's' : ''}` 
-                                        : `অনুগ্রহ করে আরও ${remainingCount}টি আবশ্যক প্রশ্নের উত্তর দিন`}
-                                </span>
-                            </>
-                        )}
-                    </button>
+                <div className="mt-8 pt-6 border-t border-gray-100 flex flex-col sm:flex-row gap-4">
+                    {currentPage === 2 && (
+                        <button 
+                            onClick={() => setCurrentPage(1)}
+                            className="w-full sm:w-auto py-4 px-6 font-bold text-xl rounded-xl shadow-md transition-all duration-300 flex items-center justify-center gap-3 bg-white text-gray-600 border-2 border-gray-200 hover:bg-gray-50 hover:text-gray-900"
+                        >
+                            <i className="fa-solid fa-arrow-left"></i>
+                            <span>{language === 'en' ? 'Back' : 'পেছনে'}</span>
+                        </button>
+                    )}
+                    
+                    {currentPage === 1 ? (
+                        <button 
+                            onClick={() => {
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                                setCurrentPage(2);
+                            }}
+                            disabled={!isCurrentPageComplete}
+                            className={`flex-grow py-4 px-6 font-bold text-xl rounded-xl shadow-md transition-all duration-300 flex items-center justify-center gap-3 ${
+                                isCurrentPageComplete 
+                                    ? 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-lg transform hover:-translate-y-1' 
+                                    : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                            }`}
+                        >
+                            {isCurrentPageComplete ? (
+                                <>
+                                    <span>{language === 'en' ? 'Next Page' : 'পরবর্তী পৃষ্ঠা'}</span>
+                                    <i className="fa-solid fa-arrow-right"></i>
+                                </>
+                            ) : (
+                                <>
+                                    <span>
+                                        {language === 'en' 
+                                            ? `Please answer ${currentRemainingCount} more required question${currentRemainingCount !== 1 ? 's' : ''}` 
+                                            : `অনুগ্রহ করে আরও ${currentRemainingCount}টি আবশ্যক প্রশ্নের উত্তর দিন`}
+                                    </span>
+                                </>
+                            )}
+                        </button>
+                    ) : (
+                        <button 
+                            onClick={() => onComplete(answers)}
+                            disabled={!isCurrentPageComplete}
+                            className={`flex-grow py-4 px-6 font-bold text-xl rounded-xl shadow-md transition-all duration-300 flex items-center justify-center gap-3 ${
+                                isCurrentPageComplete 
+                                    ? 'bg-green-600 text-white hover:bg-green-700 hover:shadow-lg transform hover:-translate-y-1' 
+                                    : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                            }`}
+                        >
+                            {isCurrentPageComplete ? (
+                                <>
+                                    <span>{language === 'en' ? 'Generate My Assessment' : 'আমার মূল্যায়ন তৈরি করুন'}</span>
+                                    <i className="fa-solid fa-check"></i>
+                                </>
+                            ) : (
+                                <>
+                                    <span>
+                                        {language === 'en' 
+                                            ? `Please answer ${currentRemainingCount} more required question${currentRemainingCount !== 1 ? 's' : ''}` 
+                                            : `অনুগ্রহ করে আরও ${currentRemainingCount}টি আবশ্যক প্রশ্নের উত্তর দিন`}
+                                    </span>
+                                </>
+                            )}
+                        </button>
+                    )}
                 </div>
             </div>
         </motion.div>
@@ -314,6 +503,7 @@ const QuestionRow: React.FC<{
                     <label className="font-bold text-gray-900 text-base sm:text-lg cursor-pointer leading-tight block mb-1">
                         {question.text[language]}
                         <span className="text-red-500 ml-1 align-top text-lg sm:text-xl" title={language === 'en' ? 'Required' : 'আবশ্যক'}>*</span>
+                        <AIHelpButton questionText={question.text[language]} language={language} />
                     </label>
                     <p className="text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
                         <i className="fa-solid fa-shield-halved text-indigo-300"></i>
@@ -499,8 +689,9 @@ const AIRecommendations: React.FC<{
     probingAnswers: ProbingAnswers; 
     language: Language; 
     isGuest: boolean; 
-}> = ({ scores, assessmentData, probingAnswers, language, isGuest }) => {
-    const [recommendations, setRecommendations] = useState('');
+    recommendations: string;
+    setRecommendations: (val: string) => void;
+}> = ({ scores, assessmentData, probingAnswers, language, isGuest, recommendations, setRecommendations }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
@@ -773,11 +964,13 @@ const AssessmentScreen: React.FC<{
     assessmentData: { domain: Domain; questions: MainQuestion[] }[];
     scores: { [key: string]: number };
     onScoreChange: (id: string, score: number) => void;
-    onComplete: () => void;
+    onComplete: (extraData: { images: string[], signature: string | null }) => void;
     language: Language;
     isAdmin: boolean;
 }> = ({ assessmentData, scores, onScoreChange, onComplete, language, isAdmin }) => {
-    
+    const [images, setImages] = useState<string[]>([]);
+    const [signature, setSignature] = useState<string | null>(null);
+
     const { isComplete, remainingCount } = useMemo(() => {
         let unanswered = 0;
         for (const group of assessmentData) {
@@ -840,9 +1033,22 @@ const AssessmentScreen: React.FC<{
                     language={language}
                 />
             ))}
+            
+            <EvidenceUploader 
+                language={language} 
+                images={images} 
+                onImagesChange={setImages} 
+            />
+            
+            <SignaturePad 
+                language={language} 
+                signature={signature} 
+                onSignatureChange={setSignature} 
+            />
+
             <div className="mt-8 pt-6 border-t border-gray-200">
                 <button
-                    onClick={onComplete}
+                    onClick={() => onComplete({ images, signature })}
                     disabled={!isComplete}
                     className={`w-full py-4 px-6 font-bold text-xl rounded-xl shadow-md transition-all duration-300 flex items-center justify-center gap-3 ${
                          isComplete 
@@ -941,6 +1147,7 @@ const ResultsPage: React.FC<{
     isGuest: boolean;
 }> = ({ totalScore, scores, assessmentData, probingAnswers, onStartOver, language, isGuest }) => {
     const [isExporting, setIsExporting] = useState(false);
+    const [recommendations, setRecommendations] = useState('');
     
     // Default to the lowest interpretation if none match
     const interpretation = useMemo(() => {
@@ -1131,7 +1338,15 @@ const ResultsPage: React.FC<{
                     </div>
                 </div>
 
-                <AIRecommendations scores={scores} assessmentData={assessmentData} probingAnswers={probingAnswers} language={language} isGuest={isGuest} />
+                <AIRecommendations 
+                    scores={scores} 
+                    assessmentData={assessmentData} 
+                    probingAnswers={probingAnswers} 
+                    language={language} 
+                    isGuest={isGuest} 
+                    recommendations={recommendations}
+                    setRecommendations={setRecommendations}
+                />
                 
                 {/* Detailed Breakdown for PDF */}
                 <div className={`${isExporting ? 'block' : 'hidden md:block'} mt-8`}>
@@ -1246,7 +1461,16 @@ const Footer: React.FC<{ language: Language }> = ({ language }) => (
 
 // --- Main App Component ---
 export default function App() {
-  const [language, setLanguage] = useState<Language>('en');
+  const [language, setLanguage] = useState<Language>(() => {
+    if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const langParam = params.get('lang');
+        if (langParam === 'en' || langParam === 'bn') {
+            return langParam;
+        }
+    }
+    return 'en';
+  });
   const [view, setView] = useState<'probing' | 'assessment' | 'results' | 'admin'>('probing');
   const [assessmentData, setAssessmentData] = useState<{ domain: Domain; questions: MainQuestion[] }[] | null>(null);
   const [scores, setScores] = useState<{ [key: string]: number }>({});
@@ -1255,6 +1479,9 @@ export default function App() {
 
   // Load progress from localStorage on mount
   useEffect(() => {
+    if (!localStorage.getItem('sme_assessment_start_time')) {
+        localStorage.setItem('sme_assessment_start_time', Date.now().toString());
+    }
     const savedProgress = localStorage.getItem('green_business_assessment_progress');
     if (savedProgress) {
         try {
@@ -1317,7 +1544,24 @@ export default function App() {
     return sumMax > 0 ? Math.round((sumScore / sumMax) * 100) : 0;
   }, [scores, assessmentData]);
 
-  const handleAssessmentComplete = async () => {
+  const handleAssessmentComplete = async (extraData: { images: string[], signature: string | null }) => {
+    let metadata = {};
+    if (typeof window !== 'undefined') {
+        const completionTime = Date.now();
+        const startTimeStr = localStorage.getItem('sme_assessment_start_time') || completionTime.toString();
+        const startTime = parseInt(startTimeStr, 10);
+        const durationMs = completionTime - startTime;
+        
+        metadata = {
+            userAgent: navigator.userAgent,
+            durationMs,
+            platform: navigator.platform,
+            languagePreference: language,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            completedAt: new Date().toISOString()
+        };
+    }
+
     if (currentUser) {
       try {
         await addDoc(collection(db, 'assessments'), {
@@ -1325,7 +1569,10 @@ export default function App() {
           createdAt: serverTimestamp(),
           probingAnswers: probingAnswers,
           scores: scores,
-          totalScore: totalScore
+          totalScore: totalScore,
+          metadata,
+          evidenceImages: extraData.images,
+          signature: extraData.signature
         });
       } catch (err) {
         console.error("Failed to save assessment to database:", err);
@@ -1340,6 +1587,9 @@ export default function App() {
     setScores({});
     setProbingAnswers({});
     localStorage.removeItem('green_business_assessment_progress');
+    localStorage.removeItem('sme_probing_draft');
+    localStorage.removeItem('sme_probing_page');
+    localStorage.removeItem('sme_assessment_start_time');
   }, []);
 
   const renderContent = () => {
@@ -1388,7 +1638,13 @@ export default function App() {
             animate={{ opacity: 1 }}
             className="space-y-12"
          >
-           <AdminDashboard onViewAssessment={() => setView('probing')} />
+           <React.Suspense fallback={
+               <div className="flex items-center justify-center h-64">
+                   <div className="w-8 h-8 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
+               </div>
+           }>
+               <AdminDashboard onViewAssessment={() => setView('probing')} />
+           </React.Suspense>
          </motion.div>
        );
     }
@@ -1509,6 +1765,9 @@ export default function App() {
       </main>
 
       <Footer language={language} />
+      <React.Suspense fallback={null}>
+        <SustainabilityAssistant />
+      </React.Suspense>
     </div>
   );
 }

@@ -62,14 +62,14 @@ export interface ProbingQuestionOption {
 export interface ProbingQuestion {
     id: string;
     backendTag: string;
-    type: 'text' | 'select' | 'checkbox';
+    type: 'text' | 'select' | 'checkbox' | 'location' | 'photo' | 'signature';
     text: LocalizedString;
     options?: ProbingQuestionOption[];
     dependsOn?: (answers: ProbingAnswers) => boolean;
 }
 
 export interface ProbingAnswers {
-    [key: string]: string | string[];
+    [key: string]: any;
 }
 
 export type WeightPriority = 'Very High' | 'High' | 'Medium' | 'Low' | 'Pathway';

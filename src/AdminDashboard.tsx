@@ -10,11 +10,14 @@ import {
     RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ScatterChart, Scatter, ZAxis
 } from 'recharts';
 import { format, subDays, isAfter, isBefore, startOfDay } from 'date-fns';
+import { generateNarrativeInsights } from './services/geminiService';
 
 export const AdminDashboard: React.FC<{ onViewAssessment: () => void }> = ({ onViewAssessment }) => {
   const { userProfile } = useAuth();
   const [assessments, setAssessments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [aiInsights, setAiInsights] = useState<{ insights: string[], recommendation: string } | null>(null);
+  const [generatingInsights, setGeneratingInsights] = useState(false);
   
   // Advanced Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -80,6 +83,73 @@ export const AdminDashboard: React.FC<{ onViewAssessment: () => void }> = ({ onV
 
     return filtered;
   }, [assessments, searchTerm, filterBizType, filterMinScore, filterDateRange]);
+
+    // SME Profiles
+    const distributionFieldOptions = [
+        { id: 'P4', label: 'Districts / Locations' },
+        { id: 'P3', label: 'Operating Premise Type' },
+        { id: 'P10', label: 'Mixed vs Single Activity' },
+        { id: 'P2', label: 'Broad Sector Category' },
+        { id: 'P5', label: 'Workforce Size (Band)' },
+        { id: 'P7', label: 'Monthly Turnover Band' },
+        { id: 'P11', label: 'Energy Source Usage' },
+        { id: 'P12', label: 'Equipment Intensity' },
+        { id: 'P13', label: 'Water Use intensity' },
+        { id: 'P16', label: 'Waste Handling Method' },
+        { id: 'P21', label: 'Decision Maker Profile' },
+        { id: 'P23', label: 'Finance Interest Timeline' },
+        { id: 'P26', label: 'Certification Path Interest' },
+    ];
+
+    const benchmarkDimensionOptions = [
+        { id: 'P4', label: 'Geographic Location' },
+        { id: 'P10', label: 'Business Model Type' },
+        { id: 'P2', label: 'Industrial Sector' },
+        { id: 'P3', label: 'Premise Ownership' },
+        { id: 'P5', label: 'Organization Scale (Staff)' },
+        { id: 'P7', label: 'Economic Tier (Turnover)' },
+        { id: 'P12', label: 'Machine Intensity' },
+        { id: 'P17', label: 'Pollution Likelihood' },
+        { id: 'P21', label: 'Leadership Profile' }
+    ];
+
+  const handleDownloadSummary = () => {
+    if (!chartData) return;
+    
+    const rows: string[][] = [
+        ['EXECUTIVE SUMMARY REPORT', format(new Date(), 'yyyy-MM-dd HH:mm')],
+        [],
+        ['KEY PERFORMANCE INDICATORS'],
+        ['Metric', 'Value'],
+        ['Total Assessments', chartData.totalAssessments.toString()],
+        ['Average Sustainability Score', `${chartData.avgScore}%`],
+        [],
+        ['DOMAIN PERFORMANCE'],
+        ['Domain', 'Avg Score (1-5)'],
+        ...chartData.domainData.map(d => [d.name, d.value.toString()]),
+        [],
+        ['GEOGRAPHIC LEADERBOARD'],
+        ['District', 'Count'],
+        ...chartData.geoData.map(g => [g.name, g.count.toString()]),
+        [],
+        ['LOWEST SCORING INDICATORS (CRITICAL)'],
+        ['Question ID', 'Average Score'],
+        ...chartData.lowScoringQuestions.map((q:any) => [q.qId, q.avg.toFixed(2)])
+    ];
+
+    const csvContent = rows
+        .map(row => row.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `GreenSME_Executive_Summary_${format(new Date(), 'yyyyMMdd')}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const bizTypes = useMemo(() => {
     const types = new Set<string>();
@@ -161,6 +231,22 @@ export const AdminDashboard: React.FC<{ onViewAssessment: () => void }> = ({ onV
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleGenerateAIInsights = async () => {
+    if (!chartData || generatingInsights) return;
+    setGeneratingInsights(true);
+    
+    const summary = `
+        Total Submissions: ${chartData.totalAssessments}
+        Average Score: ${chartData.avgScore}%
+        Geo Focus: ${chartData.geoData.map(g => `${g.name} (${g.count})`).join(', ')}
+        Top Sectors: ${distributionData.slice(0, 3).map(d => `${d.name} (${d.count})`).join(', ')}
+    `;
+
+    const result = await generateNarrativeInsights(summary);
+    if (result) setAiInsights(result);
+    setGeneratingInsights(false);
   };
 
   const chartData = useMemo(() => {
@@ -368,9 +454,76 @@ export const AdminDashboard: React.FC<{ onViewAssessment: () => void }> = ({ onV
               <i className="fa-solid fa-plus uppercase text-xs opacity-60"></i> New
           </button>
           <button onClick={handleDownload} className="px-6 py-3 border-2 border-indigo-600 text-indigo-600 font-black rounded-2xl hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2">
-              <i className="fa-solid fa-download opacity-60"></i> Export
+              <i className="fa-solid fa-file-csv opacity-60"></i> Raw Data
+          </button>
+          <button onClick={handleDownloadSummary} className="px-6 py-3 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg">
+              <i className="fa-solid fa-file-lines opacity-60"></i> Summary Report
           </button>
         </div>
+      </div>
+
+      {/* AI Executive Summary */}
+      <div className="mb-10 bg-gradient-to-br from-indigo-900 to-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-2xl">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-[100px] -mr-32 -mt-32"></div>
+          <div className="relative z-10">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+                  <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center text-2xl border border-white/10">
+                          <i className="fa-solid fa-wand-magic-sparkles text-indigo-300"></i>
+                      </div>
+                      <div>
+                          <h3 className="text-2xl font-black tracking-tight">AI Executive Summary</h3>
+                          <p className="text-indigo-300/60 text-xs font-bold uppercase tracking-widest mt-1">Real-time narrative intelligence</p>
+                      </div>
+                  </div>
+                  <button 
+                    onClick={handleGenerateAIInsights}
+                    disabled={generatingInsights}
+                    className="px-8 py-4 bg-white text-indigo-900 font-black rounded-2xl hover:bg-indigo-50 transition-all shadow-xl active:scale-95 disabled:opacity-50 flex items-center gap-3"
+                  >
+                      {generatingInsights ? (
+                        <>
+                            <i className="fa-solid fa-circle-notch animate-spin"></i>
+                            Analyzing...
+                        </>
+                      ) : (
+                        <>
+                            <i className="fa-solid fa-bolt"></i>
+                            {aiInsights ? 'Refresh Analysis' : 'Generate Insights'}
+                        </>
+                      )}
+                  </button>
+              </div>
+
+              {!aiInsights && !generatingInsights && (
+                <div className="py-12 text-center border-2 border-dashed border-white/10 rounded-3xl">
+                    <p className="text-indigo-200/40 font-bold uppercase tracking-widest text-xs">Click generate to analyze current data trends with AI</p>
+                </div>
+              )}
+
+              {aiInsights && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                    <div className="space-y-4">
+                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-300/60">Key Observations</h4>
+                        <div className="grid gap-3">
+                            {aiInsights.insights.map((insight, i) => (
+                                <div key={i} className="flex gap-4 p-4 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-colors group/item">
+                                    <span className="text-indigo-400 font-black text-xs mt-1">0{i+1}</span>
+                                    <p className="text-sm font-medium leading-relaxed text-indigo-50">{insight}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="bg-white/5 p-6 rounded-3xl border border-indigo-500/20 self-start">
+                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-300/60 mb-4">Strategic recommendation</h4>
+                        <div className="flex gap-4">
+                            <i className="fa-solid fa-chess-knight text-2xl text-indigo-400 mt-1"></i>
+                            <p className="font-serif italic text-lg leading-relaxed text-indigo-50">{aiInsights.recommendation}</p>
+                        </div>
+                    </div>
+                </div>
+              )}
+          </div>
       </div>
 
       {/* Filter Bar */}
@@ -500,12 +653,10 @@ export const AdminDashboard: React.FC<{ onViewAssessment: () => void }> = ({ onV
                             value={selectedDistributionField}
                             onChange={(e) => setSelectedDistributionField(e.target.value)}
                         >
-                            <optgroup label="SME Profiles">
-                                <option value="P4">Districts / Locations</option>
-                                <option value="P3">Business Registration Status</option>
-                                <option value="P10">Revenue Categories</option>
-                                <option value="P2">Sector Classification</option>
-                                <option value="P11">Employee Count</option>
+                            <optgroup label="SME Analytics Dimensions">
+                                {distributionFieldOptions.map(opt => (
+                                    <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                ))}
                             </optgroup>
                         </select>
                     </div>
@@ -606,11 +757,9 @@ export const AdminDashboard: React.FC<{ onViewAssessment: () => void }> = ({ onV
                                 onChange={(e) => setSelectedBenchmarkDimension(e.target.value)}
                                 className="bg-transparent text-xs font-bold text-gray-700 focus:outline-none cursor-pointer hover:text-indigo-600 transition-colors"
                             >
-                                <option value="P4">District / Location</option>
-                                <option value="P10">Revenue Tier</option>
-                                <option value="P2">Business Sector</option>
-                                <option value="P3">Registration Status</option>
-                                <option value="P11">Workforce Size</option>
+                                {benchmarkDimensionOptions.map(opt => (
+                                    <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                ))}
                             </select>
                         </div>
                     </div>
