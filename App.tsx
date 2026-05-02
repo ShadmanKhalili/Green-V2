@@ -729,7 +729,8 @@ const AIRecommendations: React.FC<{
         setLoading(true);
         setError('');
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
+            const apiKey = process.env.GEMINI_API_KEY || '';
+            const ai = new GoogleGenAI({ apiKey });
 
             const lowScoringAnswers = assessmentData
                 .flatMap(p => p.questions)

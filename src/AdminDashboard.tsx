@@ -86,31 +86,22 @@ export const AdminDashboard: React.FC<{ onViewAssessment: () => void }> = ({ onV
 
     // SME Profiles
     const distributionFieldOptions = [
-        { id: 'P4', label: 'Districts / Locations' },
+        { id: 'P2', label: 'Districts / Locations' },
+        { id: 'P8', label: 'Broad Sector Category' },
         { id: 'P3', label: 'Operating Premise Type' },
         { id: 'P10', label: 'Mixed vs Single Activity' },
-        { id: 'P2', label: 'Broad Sector Category' },
+        { id: 'P4', label: 'Registration Status' },
         { id: 'P5', label: 'Workforce Size (Band)' },
         { id: 'P7', label: 'Monthly Turnover Band' },
-        { id: 'P11', label: 'Energy Source Usage' },
-        { id: 'P12', label: 'Equipment Intensity' },
-        { id: 'P13', label: 'Water Use intensity' },
-        { id: 'P16', label: 'Waste Handling Method' },
-        { id: 'P21', label: 'Decision Maker Profile' },
-        { id: 'P23', label: 'Finance Interest Timeline' },
-        { id: 'P26', label: 'Certification Path Interest' },
     ];
 
     const benchmarkDimensionOptions = [
-        { id: 'P4', label: 'Geographic Location' },
+        { id: 'P2', label: 'Geographic Location' },
+        { id: 'P8', label: 'Industrial Sector' },
         { id: 'P10', label: 'Business Model Type' },
-        { id: 'P2', label: 'Industrial Sector' },
-        { id: 'P3', label: 'Premise Ownership' },
-        { id: 'P5', label: 'Organization Scale (Staff)' },
-        { id: 'P7', label: 'Economic Tier (Turnover)' },
-        { id: 'P12', label: 'Machine Intensity' },
-        { id: 'P17', label: 'Pollution Likelihood' },
-        { id: 'P21', label: 'Leadership Profile' }
+        { id: 'P3', label: 'Premise Type' },
+        { id: 'P5', label: 'Organization Scale' },
+        { id: 'P7', label: 'Economic Tier' }
     ];
 
   const handleDownloadSummary = () => {
@@ -269,10 +260,10 @@ export const AdminDashboard: React.FC<{ onViewAssessment: () => void }> = ({ onV
       });
       const distData = Object.entries(distribution).map(([range, count]) => ({ name: range, count }));
 
-      // Type of business (from probingAnswers.type_of_business)
+      // Type of business (Primary Sector P8)
       const businessTypes: Record<string, number> = {};
       filteredAssessments.forEach(a => {
-          const bType = a.probingAnswers?.type_of_business;
+          const bType = a.probingAnswers?.P8;
           if (bType) {
               businessTypes[bType] = (businessTypes[bType] || 0) + 1;
           }
@@ -336,10 +327,10 @@ export const AdminDashboard: React.FC<{ onViewAssessment: () => void }> = ({ onV
           .sort((a, b) => b.count - a.count)
           .slice(0, 5);
 
-      // Geographic Distribution (By District - P4)
+      // Geographic Distribution (By District - P2)
       const geoTracker: Record<string, number> = {};
       filteredAssessments.forEach(a => {
-          const district = a.probingAnswers?.P4 || 'Other';
+          const district = a.probingAnswers?.P2 || 'Other';
           geoTracker[district] = (geoTracker[district] || 0) + 1;
       });
       const geoData = Object.entries(geoTracker)
