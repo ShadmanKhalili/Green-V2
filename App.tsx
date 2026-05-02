@@ -1,7 +1,7 @@
 
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Language, Indicator, Pillar, ProbingQuestion, ProbingAnswers } from './types';
+import { Language, Indicator, Pillar, ProbingQuestion, ProbingAnswers, Domain, MainQuestion } from './types';
 import { MAIN_QUESTIONS, DOMAINS } from './questionBank';
 import { SCORING_OPTIONS, PROBING_QUESTIONS, SCORE_INTERPRETATIONS, SECTOR_BENCHMARKS, KEY_RESOURCES } from './constants';
 import { GoogleGenAI } from "@google/genai";
@@ -9,6 +9,8 @@ import { useAuth } from './AuthContext';
 import { AdminDashboard } from './src/AdminDashboard';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
+import { motion, AnimatePresence } from 'motion/react';
+import Markdown from 'react-markdown';
 
 declare global {
   interface Window {
@@ -38,7 +40,12 @@ const getWeightNumber = (priority: WeightPriority): number => {
 
 const generateCustomAssessmentData = (answers: ProbingAnswers) => {
     // Determine which questions apply based on routing conditions
-    const applicableQuestions = MAIN_QUESTIONS.filter(q => q.routingCondition(answers));
+    const applicableQuestions = MAIN_QUESTIONS.filter(q => {
+        const isMatched = q.routingCondition(answers);
+        return isMatched;
+    });
+    
+    console.log(`Routing Logic: ${applicableQuestions.length}/${MAIN_QUESTIONS.length} questions matched for profile.`);
     
     // Group by Domain
     const groupedByDomain: { domain: Domain; questions: MainQuestion[] }[] = [];
@@ -138,11 +145,40 @@ const ProbingQuestionComponent: React.FC<{ index: number; question: ProbingQuest
     );
 };
 
-const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => void; language: Language; }> = ({ onComplete, language }) => {
+const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => void; language: Language; isAdmin?: boolean; }> = ({ onComplete, language, isAdmin }) => {
     const [answers, setAnswers] = useState<ProbingAnswers>({});
 
     const handleAnswerChange = (id: string, value: any) => {
         setAnswers(prev => ({ ...prev, [id]: value }));
+    };
+
+    const handleAutoFill = () => {
+        const dummyAnswers: ProbingAnswers = {};
+        const bizNames = ['Green Eco Textiles', 'Dhaka Solar Solutions', 'Rural Agro Care', 'Evergreen Garments', 'Coastal Aquatics', 'Sustainable Leather Ltd', 'Bio-Craft Bangladesh'];
+        const randomBizName = bizNames[Math.floor(Math.random() * bizNames.length)] + ' ' + Math.floor(Math.random() * 100);
+
+        PROBING_QUESTIONS.forEach(q => {
+             if (q.type === 'text') {
+                 if (q.id === 'P1') {
+                     dummyAnswers[q.id] = randomBizName;
+                 } else {
+                     dummyAnswers[q.id] = 'Auto filled text ' + Math.floor(Math.random() * 1000);
+                 }
+             }
+             if (q.type === 'select' && q.options) {
+                 const validOptions = q.options.filter(o => o.value !== 'default');
+                 if (validOptions.length > 0) {
+                     const randomIndex = Math.floor(Math.random() * validOptions.length);
+                     dummyAnswers[q.id] = validOptions[randomIndex].value;
+                 }
+             }
+             if (q.type === 'checkbox' && q.options) {
+                 const count = Math.floor(Math.random() * q.options.length) + 1;
+                 const shuffled = [...q.options].sort(() => 0.5 - Math.random());
+                 dummyAnswers[q.id] = shuffled.slice(0, count).map(o => o.value);
+             }
+        });
+        setAnswers(dummyAnswers);
     };
 
     const visibleQuestions = useMemo(() => {
@@ -163,7 +199,12 @@ const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => 
     const remainingCount = requiredQuestions.length - answeredCount;
 
     return (
-        <div className="container mx-auto p-4 sm:p-8 hover-effects-enabled">
+        <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="container mx-auto p-4 sm:p-8 hover-effects-enabled"
+        >
             <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl p-6 sm:p-10 border border-gray-100 relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-2 bg-gray-100">
                     <div 
@@ -172,7 +213,14 @@ const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => 
                     ></div>
                 </div>
 
-                <h2 className="text-3xl sm:text-4xl font-extrabold text-center text-gray-800 mb-3 tracking-tight mt-2">{language === 'en' ? 'Tell us about your business' : 'আপনার ব্যবসা সম্পর্কে আমাদের বলুন'}</h2>
+                <div className="flex justify-between items-center mt-2 mb-3">
+                    <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-800 tracking-tight flex-grow text-center">{language === 'en' ? 'Tell us about your business' : 'আপনার ব্যবসা সম্পর্কে আমাদের বলুন'}</h2>
+                    {isAdmin && (
+                        <button onClick={handleAutoFill} className="shrink-0 px-3 py-1 bg-purple-100 text-purple-700 rounded-md shadow-sm hover:bg-purple-200 font-bold text-sm">
+                            <i className="fa-solid fa-bolt mr-1"></i> Auto-Fill
+                        </button>
+                    )}
+                </div>
                 <p className="text-center text-gray-600 mb-2 text-lg">{language === 'en' ? 'Your answers will help us create a personalized assessment.' : 'আপনার উত্তর আমাদের একটি ব্যক্তিগত মূল্যায়ন তৈরি করতে সাহায্য করবে।'}</p>
                 <div className="flex justify-center mb-8">
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 text-sm font-semibold rounded-full border border-green-200">
@@ -215,7 +263,7 @@ const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => 
                     </button>
                 </div>
             </div>
-        </div>
+        </motion.div>
     );
 };
 
@@ -340,26 +388,56 @@ const ScoreGauge: React.FC<{ score: number; }> = ({ score }) => {
 };
 
 const ResultsSummaryCard: React.FC<{ totalScore: number; language: Language; }> = ({ totalScore, language }) => {
-  const interpretation = useMemo(() => SCORE_INTERPRETATIONS.find(interp => totalScore >= interp.minScore)!, [totalScore]);
+  const interpretation = useMemo(() => {
+    const found = SCORE_INTERPRETATIONS.find(interp => totalScore >= interp.minScore);
+    return found || SCORE_INTERPRETATIONS[SCORE_INTERPRETATIONS.length - 1];
+  }, [totalScore]);
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-8 my-8">
-      <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">{language === 'en' ? 'Your Assessment Result' : 'আপনার মূল্যায়ন ফলাফল'}</h2>
-      <div className="flex flex-col items-center">
-        <ScoreGauge score={totalScore} />
-        <div className={`mt-4 px-4 py-2 rounded-full font-semibold text-white ${interpretation.colorClass}`}>{interpretation.rating.level[language]}</div>
+    <div className="bg-white rounded-2xl shadow-xl p-8 sm:p-12 my-8 border border-gray-100 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-2 bg-gray-100">
+        <div className={`h-full ${interpretation.colorClass} transition-all duration-1000`} style={{ width: `${totalScore}%` }}></div>
       </div>
-      <div className="mt-6 text-center">
-        <p className="text-gray-600">{interpretation.rating.meaning[language]}</p>
-        <div className="mt-4 p-4 bg-gray-100 rounded-lg">
-            <h4 className="font-bold text-gray-800">{language === 'en' ? 'Recommended Actions' : 'প্রস্তাবিত পদক্ষেপ'}</h4>
-            <p className="text-green-700">{interpretation.rating.actions[language]}</p>
+      
+      <div className="flex flex-col lg:flex-row items-center gap-12">
+        <div className="shrink-0 relative">
+          <ScoreGauge score={totalScore} />
+          <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap">
+             <span className={`px-4 py-1.5 rounded-full text-sm font-black text-white shadow-lg ${interpretation.colorClass} border-2 border-white animate-bounce`}>
+                {interpretation.rating.level[language]}
+             </span>
+          </div>
         </div>
-      </div>
-      <div className="mt-8">
-        <h4 className="text-lg font-bold text-gray-800 mb-2">{language === 'en' ? 'Sector Benchmarks' : 'খাত বেঞ্চমার্ক'}</h4>
-        <div className="space-y-2">
-            {SECTOR_BENCHMARKS.map(bm => (<div key={bm.sector.en} className="flex justify-between items-center text-sm"><span className="text-gray-600">{bm.sector[language]}:</span><span className="font-semibold text-gray-800">{bm.score}/100</span></div>))}
+        
+        <div className="flex-grow text-center lg:text-left">
+          <h2 className="text-4xl font-black text-gray-900 tracking-tight mb-4">
+            {language === 'en' ? 'Assessment Results' : 'মূল্যায়ন ফলাফল'}
+          </h2>
+          <p className="text-xl text-gray-600 leading-relaxed max-w-2xl">
+            {interpretation.rating.meaning[language]}
+          </p>
+          
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-5 bg-green-50 rounded-2xl border border-green-100 flex items-start gap-4">
+              <div className="w-10 h-10 bg-green-100 text-green-600 rounded-xl flex items-center justify-center shrink-0">
+                <i className="fa-solid fa-lightbulb"></i>
+              </div>
+              <div>
+                <h4 className="font-black text-green-900 text-sm uppercase tracking-wider mb-1">{language === 'en' ? 'Key Action' : 'প্রধান পদক্ষেপ'}</h4>
+                <p className="text-green-800 font-medium text-sm leading-relaxed">{interpretation.rating.actions[language]}</p>
+              </div>
+            </div>
+            
+            <div className="p-5 bg-blue-50 rounded-2xl border border-blue-100 flex items-start gap-4">
+              <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
+                <i className="fa-solid fa-chart-simple"></i>
+              </div>
+              <div>
+                <h4 className="font-black text-blue-900 text-sm uppercase tracking-wider mb-1">{language === 'en' ? 'SME Average' : 'এসএমই গড়'}</h4>
+                <p className="text-blue-800 font-medium text-sm">Most businesses score between 40-55. You are doing {totalScore > 50 ? 'better than average!' : 'well, with room to grow.'}</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -378,12 +456,17 @@ const InfoSection: React.FC<{ language: Language; }> = ({ language }) => (
     </div>
 );
 
-const AIRecommendations: React.FC<{ scores: { [key: string]: number }; assessmentData: { domain: Domain; questions: MainQuestion[] }[]; probingAnswers: ProbingAnswers; language: Language; }> = ({ scores, assessmentData, probingAnswers, language }) => {
+const AIRecommendations: React.FC<{ scores: { [key: string]: number }; assessmentData: { domain: Domain; questions: MainQuestion[] }[]; probingAnswers: ProbingAnswers; language: Language; isGuest: boolean; }> = ({ scores, assessmentData, probingAnswers, language, isGuest }) => {
     const [recommendations, setRecommendations] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
     const generateRecommendations = async () => {
+        if (isGuest) {
+             setLoading(false);
+             return;
+        }
+
         setLoading(true);
         setError('');
         try {
@@ -415,7 +498,7 @@ A business has just completed a sustainability assessment. Based on their profil
 
 Crucially, tailor every recommendation specifically to the provided "Business Profile". For example, take into account their sector (e.g., manufacturing vs. service), location (urban vs. rural), their primary customer base, size of the business, and the specific resources they consume. The solutions must be practical and relevant to their specific constraints and context.
 
-For each recommendation, explain why it's important and suggest the first practical step they can take. Focus on low-cost, high-impact suggestions. Format the response as Markdown.
+For each recommendation, explain why it's important and suggest the first practical step they can take. Focus on low-cost, high-impact suggestions. Format the response as Markdown with clear headings and bullet points.
 
 Business Profile:
 ${businessProfile}
@@ -426,7 +509,7 @@ ${lowScoringAnswers}
 Now, provide your expert recommendations tailored to the specific business profile.`;
 
             const response = await ai.models.generateContent({
-                model: 'gemini-3.1-pro-preview',
+                model: "gemini-3-flash-preview",
                 contents: prompt,
             });
 
@@ -441,22 +524,95 @@ Now, provide your expert recommendations tailored to the specific business profi
 
     useEffect(() => {
         generateRecommendations();
-    }, [assessmentData, scores, probingAnswers, language]);
+    }, [assessmentData, scores, probingAnswers, language, isGuest]);
+
+    if (isGuest) {
+         return (
+            <div className="bg-yellow-50 rounded-xl shadow-lg border border-yellow-200 p-8 my-8 text-center flex flex-col items-center justify-center">
+                <div className="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center text-3xl mb-4">
+                    <i className="fa-solid fa-lock"></i>
+                </div>
+                <h2 className="text-2xl font-bold text-yellow-800 mb-2">{language === 'en' ? 'Unlock AI Recommendations' : 'AI সুপারিশগুলি আনলক করুন'}</h2>
+                <p className="text-yellow-700 max-w-md">
+                   {language === 'en' 
+                     ? 'Log in to receive personalized, AI-driven recommendations tailored specifically to your business profile and assessment results.' 
+                     : 'আপনার প্রোফাইল এবং ফলাফলের জন্য বিশেষায়িত এআই সুপারিশ পেতে লগ ইন করুন।'}
+                </p>
+            </div>
+         );
+    }
 
     return (
-        <div className="bg-white rounded-xl shadow-lg p-8 my-8">
-            <h2 className="text-2xl font-bold text-green-800 mb-4">{language === 'en' ? 'AI-Generated Recommendations' : 'AI-জেনারেটেড সুপারিশ'}</h2>
-            {loading && (
-                 <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-700"></div>
-                    <p className="ml-4 text-gray-600">{language === 'en' ? 'Generating personalized advice...' : 'ব্যক্তিগত পরামর্শ তৈরি করা হচ্ছে...'}</p>
+        <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden my-12"
+        >
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-8 text-white relative overflow-hidden">
+               <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16 animate-pulse"></div>
+               <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
+                   <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-3xl shadow-lg border border-white/20 transform rotate-3">
+                       <i className="fa-solid fa-wand-magic-sparkles"></i>
+                   </div>
+                   <div className="text-center md:text-left">
+                       <h2 className="text-3xl font-black tracking-tight">{language === 'en' ? 'SME Green Growth Strategies' : 'এসএমই গ্রিন গ্রোথ কৌশল'}</h2>
+                       <p className="text-blue-100 mt-2 font-medium">
+                           {language === 'en' 
+                             ? 'AI-powered insights specifically tailored for your business context in Bangladesh.' 
+                             : 'আপনার ব্যবসার প্রেক্ষাপটে বিশেষভাবে তৈরি এআই-চালিত অন্তর্দৃষ্টি।'}
+                       </p>
+                   </div>
+               </div>
+            </div>
+
+            <div className="p-8 sm:p-10">
+                {loading && (
+                     <div className="flex flex-col items-center justify-center py-16">
+                        <div className="relative w-20 h-20">
+                            <div className="absolute inset-0 border-4 border-blue-100 rounded-full"></div>
+                            <div className="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+                            <div className="absolute inset-0 flex items-center justify-center text-blue-600 text-2xl animate-pulse">
+                                <i className="fa-solid fa-brain"></i>
+                            </div>
+                        </div>
+                        <p className="mt-8 text-gray-500 font-bold tracking-widest uppercase text-xs animate-pulse">
+                            {language === 'en' ? 'Crafting your personalized roadmap...' : 'আপনার ব্যক্তিগত রোডম্যাপ তৈরি করা হচ্ছে...'}
+                        </p>
+                    </div>
+                )}
+                
+                {error && (
+                    <div className="p-6 bg-red-50 border border-red-100 text-red-700 rounded-xl flex items-center gap-4">
+                        <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-xl shrink-0">
+                            <i className="fa-solid fa-triangle-exclamation"></i>
+                        </div>
+                        <div>
+                            <p className="font-bold">{language === 'en' ? 'Something went wrong' : 'কিছু ভুল হয়েছে'}</p>
+                            <p className="text-sm opacity-90">{error}</p>
+                        </div>
+                    </div>
+                )}
+
+                {!loading && !error && (
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.2 }}
+                        className="markdown-recommendations prose prose-lg prose-slate max-w-none prose-headings:text-indigo-900 prose-headings:font-black prose-p:text-gray-700 prose-li:text-gray-700 prose-strong:text-indigo-700"
+                    >
+                        <Markdown>{recommendations}</Markdown>
+                    </motion.div>
+                )}
+            </div>
+            
+            <div className="bg-gray-50 px-8 py-4 border-t border-gray-100 flex justify-between items-center">
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Model: Gemini 3 Flash Preview</span>
+                <div className="flex gap-1">
+                    {[1,2,3].map(i => <div key={i} className="w-1.5 h-1.5 bg-blue-200 rounded-full"></div>)}
                 </div>
-            )}
-            {error && <p className="text-red-500">{error}</p>}
-            {!loading && !error && (
-                <div className="prose prose-green max-w-none" dangerouslySetInnerHTML={{ __html: (recommendations || '').replace(/\n/g, '<br />') }}></div>
-            )}
-        </div>
+            </div>
+        </motion.div>
     );
 };
 
@@ -470,7 +626,7 @@ const AssessmentProgress: React.FC<{
     const progressPercentage = totalQuestions > 0 ? (answeredQuestions / totalQuestions) * 100 : 0;
 
     return (
-        <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-sm shadow-md p-4 mb-8 rounded-lg">
+        <div className="sticky top-16 z-20 bg-white/80 backdrop-blur-sm shadow-md p-4 mb-8 rounded-lg">
             <div className="flex justify-between items-center mb-2 text-sm md:text-base">
                 <h3 className="font-bold text-green-800">{language === 'en' ? 'Progress' : 'অগ্রগতি'}</h3>
                 <span className="font-semibold text-gray-700">{answeredQuestions} / {totalQuestions} {language === 'en' ? 'Answered' : 'উত্তর'}</span>
@@ -491,7 +647,8 @@ const AssessmentScreen: React.FC<{
     onScoreChange: (id: string, score: number) => void;
     onComplete: () => void;
     language: Language;
-}> = ({ assessmentData, scores, onScoreChange, onComplete, language }) => {
+    isAdmin: boolean;
+}> = ({ assessmentData, scores, onScoreChange, onComplete, language, isAdmin }) => {
     
     const { isComplete, remainingCount } = useMemo(() => {
         let unanswered = 0;
@@ -505,9 +662,47 @@ const AssessmentScreen: React.FC<{
         return { isComplete: unanswered === 0, remainingCount: unanswered };
     }, [assessmentData, scores]);
 
+    const handleAutoFill = () => {
+         for (const group of assessmentData) {
+             for (const q of group.questions) {
+                 if (scores[q.id] === undefined || scores[q.id] === -2) {
+                     // Randomly select 1 to 4 with a slight bias towards higher scores to look "better"
+                     const randomValue = Math.random();
+                     let score = 1;
+                     if (randomValue > 0.7) score = 4;
+                     else if (randomValue > 0.3) score = 3;
+                     else if (randomValue > 0.1) score = 2;
+                     
+                     onScoreChange(q.id, score);
+                 }
+             }
+         }
+    };
+
     return (
-        <>
+        <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.05 }}
+            transition={{ duration: 0.4 }}
+        >
             <AssessmentProgress scores={scores} assessmentData={assessmentData} language={language} />
+            <div className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-green-50/50 p-4 rounded-xl border border-green-100">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-green-600 text-white rounded-full flex items-center justify-center shadow-lg">
+                        <i className="fa-solid fa-wand-magic-sparkles"></i>
+                    </div>
+                    <div>
+                        <h2 className="text-xl font-bold text-gray-800">{language === 'en' ? 'Personalized Assessment' : 'ব্যক্তিগত মূল্যায়ন'}</h2>
+                        <p className="text-sm text-gray-500">{language === 'en' ? 'Questions matched to your business profile' : 'আপনার ব্যবসার প্রোফাইলের সাথে সামঞ্জস্যপূর্ণ প্রশ্নগুলি'}</p>
+                    </div>
+                </div>
+                {isAdmin && (
+                    <button onClick={handleAutoFill} className="shrink-0 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg shadow-sm hover:bg-purple-200 font-bold transition-colors">
+                        <i className="fa-solid fa-bolt mr-2"></i> Admin Auto-Fill
+                    </button>
+                )}
+            </div>
             {assessmentData.map(group => (
                 <DomainCard 
                     key={group.domain.code} 
@@ -541,7 +736,61 @@ const AssessmentScreen: React.FC<{
                     )}
                 </button>
             </div>
-        </>
+        </motion.div>
+    );
+};
+
+const DetailedReportTable: React.FC<{ assessmentData: { domain: Domain; questions: MainQuestion[] }[]; scores: Record<string, number>; language: Language }> = ({ assessmentData, scores, language }) => {
+    return (
+        <div className="mt-12 pt-12 border-t border-gray-200">
+            <h3 className="text-2xl font-black text-gray-900 mb-8 border-l-4 border-indigo-600 pl-4">
+                {language === 'en' ? 'Detailed Analysis Report' : 'বিস্তারিত বিশ্লেষণ রিপোর্ট'}
+            </h3>
+            <div className="space-y-12">
+                {assessmentData.map(domain => (
+                    <div key={domain.domain.code} className="break-inside-avoid">
+                        <h4 className="text-lg font-bold text-indigo-900 mb-4 bg-indigo-50 p-3 rounded-lg flex justify-between items-center">
+                            <span>{domain.domain.name[language]}</span>
+                            <span className="text-sm font-black opacity-50">#{domain.domain.code}</span>
+                        </h4>
+                        <div className="overflow-hidden border border-gray-100 rounded-xl">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-gray-50 border-b border-gray-100">
+                                    <tr>
+                                        <th className="p-4 font-black uppercase tracking-widest text-[10px] text-gray-400 w-1/2">{language === 'en' ? 'Question' : 'প্রশ্ন'}</th>
+                                        <th className="p-4 font-black uppercase tracking-widest text-[10px] text-gray-400">{language === 'en' ? 'Score' : 'স্কোর'}</th>
+                                        <th className="p-4 font-black uppercase tracking-widest text-[10px] text-gray-400">{language === 'en' ? 'Status' : 'অবস্থা'}</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                    {domain.questions.map(q => {
+                                        const score = scores[q.id];
+                                        const option = SCORING_OPTIONS.find(o => o.score === score);
+                                        return (
+                                            <tr key={q.id}>
+                                                <td className="p-4 text-gray-700 font-medium">{q.text[language]}</td>
+                                                <td className="p-4">
+                                                    <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-black text-xs ${
+                                                        score >= 3 ? 'bg-green-100 text-green-700' :
+                                                        score >= 2 ? 'bg-orange-100 text-orange-700' :
+                                                        'bg-red-100 text-red-700'
+                                                    }`}>
+                                                        {score}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 text-xs font-semibold text-gray-500 whitespace-nowrap">
+                                                    {option?.text[language].split('-')[1]?.trim() || option?.text[language]}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
     );
 };
 
@@ -552,7 +801,8 @@ const ResultsPage: React.FC<{
     probingAnswers: ProbingAnswers;
     onStartOver: () => void;
     language: Language;
-}> = ({ totalScore, scores, assessmentData, probingAnswers, onStartOver, language }) => {
+    isGuest: boolean;
+}> = ({ totalScore, scores, assessmentData, probingAnswers, onStartOver, language, isGuest }) => {
     const [isExporting, setIsExporting] = useState(false);
     
     // Default to the lowest interpretation if none match
@@ -584,27 +834,76 @@ const ResultsPage: React.FC<{
     }, [assessmentData, scores, language]);
 
     const handleExportCSV = () => {
-        const headers = [
-            language === 'en' ? 'Domain' : 'বিভাগ',
-            language === 'en' ? 'Score' : 'স্কোর',
-            language === 'en' ? 'Max Score' : 'সর্বোচ্চ স্কোর',
-            language === 'en' ? 'Percentage' : 'শতাংশ',
-        ];
-    
-        let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n";
-    
-        domainScores.forEach(d => {
-            csvContent += `"${d.title}",${d.score},${d.maxScore},${d.percent}%\n`;
+        const rows: string[][] = [];
+        
+        // 1. Business Profile Header
+        rows.push([language === 'en' ? 'BUSINESS PROFILE' : 'ব্যবসা প্রোফাইল']);
+        Object.entries(probingAnswers).forEach(([key, value]) => {
+            const question = PROBING_QUESTIONS.find(q => q.id === key);
+            rows.push([
+                question?.text[language] || key,
+                Array.isArray(value) ? value.join('; ') : String(value)
+            ]);
         });
+        rows.push([]); // Empty row separator
+
+        // 2. Domain Scores
+        rows.push([
+            language === 'en' ? 'Domain' : 'বিভাগ',
+            language === 'en' ? 'Raw Score' : 'র স্কোর',
+            language === 'en' ? 'Max Possible' : 'সর্বোচ্চ স্কোর',
+            language === 'en' ? 'Percentage' : 'শতাংশ'
+        ]);
+        domainScores.forEach(d => {
+            rows.push([d.title, String(d.score), String(d.maxScore), `${d.percent}%`]);
+        });
+        rows.push([]);
+
+        // 3. Detailed Question Responses
+        rows.push([
+            language === 'en' ? 'Question ID' : 'প্রশ্ন আইডি',
+            language === 'en' ? 'Question Text' : 'প্রশ্নের বিবরণ',
+            language === 'en' ? 'Score' : 'স্কোর',
+            language === 'en' ? 'Interpretation' : 'ব্যাখ্যা'
+        ]);
+        
+        assessmentData.forEach(domain => {
+            domain.questions.forEach(q => {
+                const score = scores[q.id];
+                const option = SCORING_OPTIONS.find(o => o.score === score);
+                rows.push([
+                    q.id,
+                    q.text[language],
+                    String(score),
+                    option?.text[language] || ''
+                ]);
+            });
+        });
+        rows.push([]);
+
+        // 4. Overall Result
+        rows.push([language === 'en' ? 'OVERALL RATING' : 'সামগ্রিক রেটিং']);
+        rows.push([language === 'en' ? 'Total Score (%)' : 'মোট স্কোর (%)', `${totalScore}%`]);
+        rows.push([language === 'en' ? 'Assessment Rating' : 'মূল্যায়ন রেটিং', interpretation.rating.level[language]]);
+        rows.push([]);
+
+        // 5. AI Recommendations (Simplified text)
+        if (recommendations) {
+            rows.push([language === 'en' ? 'AI RECOMMENDATIONS' : 'এআই সুপারিশ']);
+            // Strip markdown for simplified CSV display or just dump it
+            rows.push([recommendations.replace(/#/g, '').replace(/\*/g, '').trim()]);
+        }
+
+        // Convert to CSV string and download
+        const csvString = rows
+            .map(row => row.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(','))
+            .join('\n');
     
-        csvContent += "\n";
-        csvContent += `Final Result,"Total Score",${totalScore}%,100%\n`;
-        csvContent += `Final Result,"Rating","${interpretation.rating.level[language]}",""\n`;
-    
-        const encodedUri = encodeURI(csvContent);
+        const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvString], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", "green_business_assessment.csv");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `GreenBiz_Report_${probingAnswers.biz_name || 'Assessment'}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -620,10 +919,15 @@ const ResultsPage: React.FC<{
         if (!input) return;
 
         setIsExporting(true);
+        document.body.classList.add('is-exporting');
 
         setTimeout(() => {
-            // FIX: Use window.html2canvas as it's defined on the window object.
-            window.html2canvas(input, { scale: 2, useCORS: true, logging: false }).then(canvas => {
+            window.html2canvas(input, { 
+                scale: 2, 
+                useCORS: true, 
+                logging: false,
+                backgroundColor: '#ffffff'
+            }).then(canvas => {
                 const imgData = canvas.toDataURL('image/png');
                 const pdf = new jsPDF('p', 'mm', 'a4');
                 const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -645,60 +949,172 @@ const ResultsPage: React.FC<{
                     heightLeft -= pdfHeight;
                 }
 
-                pdf.save('green-business-assessment.pdf');
+                pdf.save(`GreenBiz_Report_${probingAnswers.biz_name || 'Assessment'}.pdf`);
             }).finally(() => {
                 setIsExporting(false);
+                document.body.classList.remove('is-exporting');
             });
-        }, 200);
+        }, 800);
     };
 
     return (
-        <div className="max-w-4xl mx-auto">
-            <div id="results-page-content">
+        <motion.div 
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="max-w-4xl mx-auto pb-20"
+        >
+            <div id="results-page-content" className="bg-white p-8">
+                <div className="hidden export-only mb-10 pb-10 border-b-2 border-gray-100">
+                    <div className="flex justify-between items-center">
+                        <div>
+                             <h1 className="text-4xl font-black text-gray-900 tracking-tight">Green Growth Report</h1>
+                             <p className="text-gray-500 font-medium">Confidential Sustainability Assessment for {probingAnswers.biz_name || 'SME'}</p>
+                        </div>
+                        <div className="text-right">
+                             <p className="text-xs font-black text-indigo-600 uppercase tracking-widest">SME Foundation x FAO</p>
+                             <p className="text-[10px] text-gray-400 mt-1">{new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</p>
+                        </div>
+                    </div>
+                </div>
+
                 <ResultsSummaryCard totalScore={totalScore} language={language} />
-                <AIRecommendations scores={scores} assessmentData={assessmentData} probingAnswers={probingAnswers} language={language} />
+                
+                <div className="bg-white rounded-2xl shadow-xl p-8 mb-8 border border-gray-100">
+                    <h3 className="text-xl font-black text-gray-800 mb-6 flex items-center gap-2">
+                        <i className="fa-solid fa-layer-group text-indigo-600"></i>
+                        {language === 'en' ? 'Sector Comparison' : 'খাত তুলনা'}
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {SECTOR_BENCHMARKS.map(bm => (
+                            <div key={bm.sector.en} className="p-4 bg-gray-50 rounded-xl border border-gray-100 flex justify-between items-center">
+                                <span className="text-gray-600 font-medium">{bm.sector[language]}</span>
+                                <span className={`font-black ${bm.score > totalScore ? 'text-gray-400' : 'text-green-600'}`}>{bm.score}%</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <AIRecommendations scores={scores} assessmentData={assessmentData} probingAnswers={probingAnswers} language={language} isGuest={isGuest} />
+                
+                {/* Detailed Breakdown for PDF */}
+                <div className={`${isExporting ? 'block' : 'hidden md:block'} mt-8`}>
+                   <DetailedReportTable assessmentData={assessmentData} scores={scores} language={language} />
+                </div>
+
                 <InfoSection language={language} />
             </div>
 
             {!isExporting && (
-                <div className="mt-8 space-y-4">
-                     <div className="flex flex-col md:flex-row gap-4">
-                        <button
-                            onClick={handleExportPDF}
-                            className="w-full py-3 px-6 bg-red-600 text-white font-bold text-lg rounded-lg shadow-md hover:bg-red-700 transition-colors duration-300 flex items-center justify-center gap-2"
-                        >
-                            <i className="fa-solid fa-file-pdf"></i>
-                            {language === 'en' ? 'Export PDF' : 'পিডিএফ এক্সপোর্ট'}
-                        </button>
-                        <button
-                            onClick={handleExportCSV}
-                            className="w-full py-3 px-6 bg-green-600 text-white font-bold text-lg rounded-lg shadow-md hover:bg-green-700 transition-colors duration-300 flex items-center justify-center gap-2"
-                        >
-                            <i className="fa-solid fa-file-csv"></i>
-                            {language === 'en' ? 'Export CSV' : 'সিএসভি এক্সপোর্ট'}
-                        </button>
-                    </div>
+                <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {!isGuest ? (
+                        <>
+                            <button
+                                onClick={handleExportPDF}
+                                className="group py-4 px-6 bg-white border-2 border-red-600 text-red-600 font-black rounded-2xl shadow-sm hover:bg-red-600 hover:text-white transition-all flex items-center justify-center gap-3"
+                            >
+                                <i className="fa-solid fa-file-pdf group-hover:scale-125 transition-transform"></i>
+                                {language === 'en' ? 'Download PDF Report' : 'পিডিএফ রিপোর্ট ডাউনলোড'}
+                            </button>
+                            <button
+                                onClick={handleExportCSV}
+                                className="group py-4 px-6 bg-white border-2 border-green-600 text-green-600 font-black rounded-2xl shadow-sm hover:bg-green-600 hover:text-white transition-all flex items-center justify-center gap-3"
+                            >
+                                <i className="fa-solid fa-file-csv group-hover:scale-125 transition-transform"></i>
+                                {language === 'en' ? 'Export CSV' : 'সিএসভি এক্সপোর্ট'}
+                            </button>
+                        </>
+                    ) : (
+                        <div className="md:col-span-2 p-4 bg-indigo-50 rounded-2xl border border-indigo-100 flex items-center gap-3 text-indigo-700 text-sm font-bold">
+                            <i className="fa-solid fa-circle-info"></i>
+                            {language === 'en' ? 'Log in to export detailed reports' : 'বিস্তারিত রিপোর্ট এক্সপোর্ট করতে লগ ইন করুন'}
+                        </div>
+                    )}
                     <button
                         onClick={onStartOver}
-                        className="w-full py-3 px-6 bg-gray-600 text-white font-bold text-lg rounded-lg shadow-md hover:bg-gray-700 transition-colors duration-300 flex items-center justify-center gap-2"
+                        className="py-4 px-6 bg-gray-900 text-white font-black rounded-2xl shadow-xl hover:bg-black transition-all flex items-center justify-center gap-3"
                     >
                         <i className="fa-solid fa-rotate-right"></i>
-                        {language === 'en' ? 'Start Over' : 'আবার শুরু করুন'}
+                        {language === 'en' ? 'Start New Assessment' : 'নতুন মূল্যায়ন শুরু করুন'}
                     </button>
                 </div>
             )}
-        </div>
+        </motion.div>
     );
 };
 
 
+const Footer: React.FC<{ language: Language }> = ({ language }) => (
+  <footer className="bg-gray-900 text-white pt-20 pb-10 mt-28 relative overflow-hidden">
+    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 via-blue-500 to-indigo-500"></div>
+    <div className="container mx-auto px-6 relative z-10">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-16 mb-20">
+        <div className="lg:col-span-2">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-green-400 text-2xl backdrop-blur-sm border border-white/10">
+              <i className="fa-solid fa-leaf"></i>
+            </div>
+            <h3 className="text-3xl font-black tracking-tight">GreenBiz <span className="text-green-500">Toolkit</span></h3>
+          </div>
+          <p className="text-gray-400 max-w-md leading-relaxed text-lg italic">
+            {language === 'en' 
+              ? 'Empowering the backbone of Bangladesh—our SMEs—with the tools to grow sustainably and lead the green revolution.' 
+              : 'স্থায়িত্বশীলভাবে গড়ে উঠতে এবং সবুজ বিপ্লবের নেতৃত্ব দিতে বাংলাদেশের মেরুদণ্ড—আমাদের এসএমই-কে ক্ষমতায়ন করা।'}
+          </p>
+          <div className="flex gap-4 mt-8">
+            {['linkedin', 'twitter', 'facebook', 'instagram'].map(platform => (
+                <a key={platform} href="#" className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center text-gray-400 hover:text-green-400 hover:bg-white/10 transition-all border border-white/5">
+                    <i className={`fa-brands fa-${platform} text-lg`}></i>
+                </a>
+            ))}
+          </div>
+        </div>
+        
+        <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-12">
+            <div>
+              <h4 className="text-sm font-black uppercase tracking-widest mb-6 text-green-500">{language === 'en' ? 'Quick Access' : 'দ্রুত প্রবেশ'}</h4>
+              <ul className="space-y-4 text-gray-400 font-medium">
+                <li><a href="#" className="hover:text-white transition-colors">{language === 'en' ? 'Assessment' : 'মূল্যায়ন'}</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">{language === 'en' ? 'Methodology' : 'পদ্ধতি'}</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">{language === 'en' ? 'Resources' : 'সম্পদ'}</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-sm font-black uppercase tracking-widest mb-6 text-green-500">{language === 'en' ? 'Legal' : 'আইনি'}</h4>
+              <ul className="space-y-4 text-gray-400 font-medium">
+                <li><a href="#" className="hover:text-white transition-colors">{language === 'en' ? 'Privacy Policy' : 'গোপনীয়তা নীতি'}</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">{language === 'en' ? 'Terms of Service' : 'ব্যবহারের শর্তাবলী'}</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">{language === 'en' ? 'Cookie Policy' : 'কুকি নীতি'}</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-sm font-black uppercase tracking-widest mb-6 text-green-500">{language === 'en' ? 'Support' : 'সহায়তা'}</h4>
+              <ul className="space-y-4 text-gray-400 font-medium">
+                <li className="flex items-center gap-3"><i className="fa-solid fa-envelope text-green-500/50"></i> support@greenbiz.bd</li>
+                <li className="flex items-center gap-3"><i className="fa-solid fa-phone text-green-500/50"></i> +880 1234 567890</li>
+              </ul>
+            </div>
+        </div>
+      </div>
+      
+      <div className="border-t border-white/5 pt-10 flex flex-col md:flex-row justify-between items-center gap-6">
+        <p className="text-sm text-gray-500 font-medium tracking-tight">© {new Date().getFullYear()} Green Business Research Bangladesh. v3.1 Developed for SME Excellence.</p>
+        <div className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-full border border-white/5">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Systems Online</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+);
+
 // --- Main App Component ---
 export default function App() {
   const [language, setLanguage] = useState<Language>('en');
-  const [view, setView] = useState<'probing' | 'assessment' | 'results'>('probing');
+  const [view, setView] = useState<'probing' | 'assessment' | 'results' | 'admin'>('probing');
   const [assessmentData, setAssessmentData] = useState<{ domain: Domain; questions: MainQuestion[] }[] | null>(null);
   const [scores, setScores] = useState<{ [key: string]: number }>({});
   const [probingAnswers, setProbingAnswers] = useState<ProbingAnswers>({});
+  const [isGuest, setIsGuest] = useState(false);
 
   // Load progress from localStorage on mount
   useEffect(() => {
@@ -790,105 +1206,176 @@ export default function App() {
   }, []);
 
   const renderContent = () => {
-    if (!currentUser) {
+    if (!currentUser && !isGuest) {
       return (
-        <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl shadow-lg mt-8">
-          <h2 className="text-3xl font-bold mb-4 text-green-800">{language === 'en' ? 'Welcome to Green Business Assessment Tool' : 'সবুজ ব্যবসায়িক মূল্যায়ন সরঞ্জামে স্বাগতম'}</h2>
-          <p className="text-gray-600 mb-8 max-w-lg text-center text-lg">
+        <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center justify-center py-20 px-8 bg-white rounded-3xl shadow-xl mt-8 max-w-2xl mx-auto border border-green-50"
+        >
+          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center text-green-600 text-4xl mb-6 shadow-inner">
+             <i className="fa-solid fa-leaf"></i>
+          </div>
+          <h2 className="text-4xl font-extrabold mb-4 text-green-900 text-center tracking-tight">{language === 'en' ? 'Green Business Assessment' : 'সবুজ ব্যবসায়িক মূল্যায়ন'}</h2>
+          <p className="text-gray-600 mb-10 max-w-lg text-center text-lg leading-relaxed">
             {language === 'en' 
-              ? 'Please sign in to start entering assessment data.' 
-              : 'মূল্যায়ন ডেটা প্রবেশ করতে অনুগ্রহ করে সাইন ইন করুন।'}
+              ? 'Evaluate your business sustainability and get AI-powered recommendations to improve your green practices.' 
+              : 'আপনার ব্যবসার স্থায়িত্ব মূল্যায়ন করুন এবং আপনার সবুজ অনুশীলন উন্নত করতে এআই-চালিত সুপারিশ পান।'}
           </p>
-          <button onClick={signInWithGoogle} className="px-8 py-4 bg-green-600 text-white font-bold rounded-lg shadow-md hover:bg-green-700 transition flex items-center justify-center gap-3">
-            <i className="fa-brands fa-google text-xl"></i>
-            {language === 'en' ? 'Sign in with Google' : 'Google দিয়ে সাইন ইন করুন'}
-          </button>
-        </div>
+          <div className="flex flex-col w-full gap-4 max-w-sm">
+              <button onClick={signInWithGoogle} className="w-full py-4 bg-green-600 text-white font-bold rounded-xl shadow-lg hover:bg-green-700 hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center gap-3 text-lg">
+                <i className="fa-brands fa-google"></i>
+                {language === 'en' ? 'Sign in with Google' : 'Google দিয়ে সাইন ইন করুন'}
+              </button>
+              <div className="relative flex py-2 items-center">
+                  <div className="flex-grow border-t border-gray-200"></div>
+                  <span className="flex-shrink-0 mx-4 text-gray-400 text-sm">or</span>
+                  <div className="flex-grow border-t border-gray-200"></div>
+              </div>
+              <button onClick={() => setIsGuest(true)} className="w-full py-4 bg-white text-gray-700 border-2 border-gray-200 font-bold rounded-xl shadow-sm hover:bg-gray-50 hover:border-green-300 transition-all flex items-center justify-center gap-3 text-lg">
+                <i className="fa-solid fa-user-secret"></i>
+                {language === 'en' ? 'Continue as Guest' : 'অতিথি হিসাবে চালিয়ে যান'}
+              </button>
+          </div>
+          <p className="mt-6 text-sm text-gray-400 text-center">
+             {language === 'en' ? 'Guests receive a basic score but AI recommendations require login.' : 'অতিথিরা বেসিক স্কোর পাবেন তবে এআই সুপারিশের জন্য লগইন প্রয়োজন।'}
+          </p>
+        </motion.div>
       );
     }
 
-    if (userProfile?.role === 'admin' && view === 'probing' && Object.keys(probingAnswers).length === 0) {
+    if (userProfile?.role === 'admin' && view === 'admin') {
        return (
-         <div className="space-y-12">
-           <AdminDashboard />
-           <div className="border-t-4 border-green-200 pt-8 text-center max-w-3xl mx-auto">
-              <h3 className="text-3xl font-bold text-gray-800 mb-6">{language === 'en' ? 'Or Start New Assessment' : 'অথবা নতুন মূল্যায়ন শুরু করুন'}</h3>
-           </div>
-           <ProbingQuestionsForm onComplete={handleProbingComplete} language={language} />
-         </div>
+         <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="space-y-12"
+         >
+           <AdminDashboard onViewAssessment={() => setView('probing')} />
+         </motion.div>
        );
     }
 
-    switch (view) {
-        case 'probing':
-            return <ProbingQuestionsForm onComplete={handleProbingComplete} language={language} />;
-        case 'assessment':
-            return assessmentData && <AssessmentScreen 
-                assessmentData={assessmentData} 
-                scores={scores} 
-                onScoreChange={handleScoreChange} 
-                onComplete={handleAssessmentComplete} 
-                language={language}
-            />;
-        case 'results':
-            return assessmentData && <ResultsPage 
-                totalScore={totalScore} 
-                scores={scores} 
-                assessmentData={assessmentData} 
-                probingAnswers={probingAnswers} 
-                onStartOver={handleStartOver} 
-                language={language} 
-            />;
-        default:
-            return <ProbingQuestionsForm onComplete={handleProbingComplete} language={language} />;
-    }
+    return (
+        <AnimatePresence mode="wait">
+            {(() => {
+                switch (view) {
+                    case 'admin':
+                         return <div key="admin-placeholder" />; // Handled above
+                    case 'probing':
+                        return <ProbingQuestionsForm key="probing" onComplete={handleProbingComplete} language={language} isAdmin={userProfile?.role === 'admin'} />;
+                    case 'assessment':
+                        return assessmentData && <AssessmentScreen 
+                            key="assessment"
+                            assessmentData={assessmentData} 
+                            scores={scores} 
+                            onScoreChange={handleScoreChange} 
+                            onComplete={handleAssessmentComplete} 
+                            language={language}
+                            isAdmin={userProfile?.role === 'admin'}
+                        />;
+                    case 'results':
+                        return assessmentData && <ResultsPage 
+                            key="results"
+                            totalScore={totalScore} 
+                            scores={scores} 
+                            assessmentData={assessmentData} 
+                            probingAnswers={probingAnswers} 
+                            onStartOver={handleStartOver} 
+                            language={language} 
+                            isGuest={isGuest}
+                        />;
+                    default:
+                        return <ProbingQuestionsForm key="default" onComplete={handleProbingComplete} language={language} isAdmin={userProfile?.role === 'admin'} />;
+                }
+            })()}
+        </AnimatePresence>
+    );
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800 font-sans">
-      <header className="bg-green-700 text-white p-6 shadow-md relative">
-        <div className="container mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="text-center md:text-left">
-                <h1 className="text-3xl md:text-4xl font-extrabold">{language === 'en' ? 'Green Business Assessment Tool' : 'সবুজ ব্যবসায়িক মূল্যায়ন সরঞ্জাম'}</h1>
-                <p className="text-lg mt-2 opacity-90">{language === 'en' ? 'For Bangladeshi SMEs' : 'বাংলাদেশের ছোট ও মাঝারি শিল্পের জন্য'}</p>
+    <div className="min-h-screen bg-[#fcfdfc] text-gray-800 font-sans flex flex-col relative overflow-hidden">
+      {/* Decorative background elements */}
+      <div className="absolute top-0 right-0 w-96 h-96 bg-green-50 rounded-full blur-3xl -z-10 opacity-60"></div>
+      <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-50 rounded-full blur-3xl -z-10 opacity-60"></div>
+      
+      <header className="bg-white/80 backdrop-blur-md border-b border-gray-100 sticky top-0 z-50 shadow-sm">
+        <div className="container mx-auto px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-4 cursor-pointer group" onClick={handleStartOver}>
+                <div className="w-12 h-12 bg-green-600 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-green-200 transition-transform group-hover:scale-110">
+                    <i className="fa-solid fa-leaf"></i>
+                </div>
+                <div>
+                    <h1 className="text-2xl font-black text-gray-900 tracking-tight leading-none bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-green-700">GreenBiz <span className="text-green-600 font-medium font-sans">Toolkit</span></h1>
+                    <p className="text-[10px] text-gray-400 mt-1 uppercase tracking-widest font-black opacity-80">{language === 'en' ? 'Bangladeshi SME Assessment' : 'বাংলাদেশি এসএমই মূল্যায়ন'}</p>
+                </div>
             </div>
             
-            <div className="flex items-center gap-4">
-               {currentUser && (
-                  <div className="flex items-center gap-4 bg-green-800/50 px-4 py-2 rounded-full border border-green-600">
-                    <div className="flex flex-col text-sm text-right">
-                       <span className="font-bold">{currentUser.displayName || currentUser.email}</span>
-                       <span className="text-green-200 capitalize">{userProfile?.role || 'User'}</span>
+            <div className="flex items-center gap-6">
+                {userProfile?.role === 'admin' && (
+                    <nav className="flex bg-gray-100 p-1 rounded-xl border border-gray-200">
+                        <button 
+                            onClick={() => setView('probing')}
+                            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${view !== 'admin' ? 'bg-white shadow text-green-700' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                            <i className="fa-solid fa-clipboard-check mr-2"></i> Assessment
+                        </button>
+                        <button 
+                            onClick={() => setView('admin')}
+                            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${view === 'admin' ? 'bg-white shadow text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                            <i className="fa-solid fa-chart-pie mr-2"></i> Dashboard
+                        </button>
+                    </nav>
+                )}
+
+               <div className="flex items-center gap-4">
+                  {isGuest && (
+                       <button 
+                            onClick={() => { setIsGuest(false); handleStartOver(); }}
+                            className="px-4 py-2 bg-yellow-100 text-yellow-800 font-semibold rounded-full hover:bg-yellow-200 transition text-sm"
+                       >
+                           {language === 'en' ? 'Exit Guest Mode' : 'গেস্ট মোড থেকে প্রস্থান করুন'}
+                       </button>
+                  )}
+                  {currentUser && (
+                    <div className="flex items-center gap-3 bg-gray-50 pl-1 pr-3 py-1 rounded-full border border-gray-200">
+                      <img 
+                        src={currentUser.photoURL || `https://ui-avatars.com/api/?name=${currentUser.displayName}&background=random`} 
+                        alt="User" 
+                        className="w-8 h-8 rounded-full shadow-sm ring-2 ring-white"
+                      />
+                      <div className="hidden sm:flex flex-col text-xs text-right">
+                        <span className="font-bold text-gray-900">{currentUser.displayName}</span>
+                        <span className="text-green-600 font-medium uppercase text-[10px]">{userProfile?.role}</span>
+                      </div>
+                      <button 
+                        onClick={logout}
+                        className="ml-2 p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                        title="Logout"
+                      >
+                        <i className="fa-solid fa-right-from-bracket"></i>
+                      </button>
                     </div>
-                    <button 
-                       onClick={logout}
-                       className="p-2 text-red-300 hover:text-red-100 transition-colors"
-                       title="Logout"
-                    >
-                       <i className="fa-solid fa-right-from-bracket text-xl"></i>
-                    </button>
-                  </div>
-               )}
-               <div className="static md:relative">
-                 <button
-                   onClick={() => setLanguage(language === 'en' ? 'bn' : 'en')}
-                   className="px-4 py-2 bg-white text-green-700 font-semibold rounded-full shadow hover:bg-green-50 transition flex items-center gap-2"
-                 >
-                   <i className="fa-solid fa-language"></i>
-                   {language === 'en' ? 'বাংলা' : 'English'}
-                 </button>
+                  )}
+
+                  <button
+                    onClick={() => setLanguage(language === 'en' ? 'bn' : 'en')}
+                    className="w-10 h-10 bg-white text-gray-700 font-bold rounded-xl shadow-sm border border-gray-200 hover:border-green-300 hover:bg-green-50 transition flex items-center justify-center text-sm"
+                    title={language === 'en' ? 'Switch to Bangla' : 'Switch to English'}
+                  >
+                    {language === 'en' ? 'BN' : 'EN'}
+                  </button>
                </div>
             </div>
         </div>
       </header>
 
-      <main className="container mx-auto p-4 lg:p-8">
+      <main className="container mx-auto p-4 lg:p-8 flex-grow">
         {renderContent()}
       </main>
-      
-      <footer className="bg-green-800 text-white text-center p-4 mt-8">
-          <p>&copy; 2024 Sustainable Business Research Bangladesh. Version 3.1</p>
-      </footer>
+
+      <Footer language={language} />
     </div>
   );
 }
