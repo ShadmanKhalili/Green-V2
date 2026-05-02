@@ -6,7 +6,8 @@ import { DOMAINS, MAIN_QUESTIONS } from '../questionBank';
 import { PROBING_QUESTIONS } from '../constants';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
-    Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area 
+    Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area,
+    RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ScatterChart, Scatter, ZAxis
 } from 'recharts';
 import { format, subDays, isAfter, isBefore, startOfDay } from 'date-fns';
 
@@ -17,6 +18,9 @@ export const AdminDashboard: React.FC<{ onViewAssessment: () => void }> = ({ onV
   
   // Advanced Filters
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedDistributionField, setSelectedDistributionField] = useState('P4');
+  const [selectedBenchmarkMetric, setSelectedBenchmarkMetric] = useState('totalScore');
+  const [selectedBenchmarkDimension, setSelectedBenchmarkDimension] = useState('P4');
   const [filterBizType, setFilterBizType] = useState('all');
   const [filterMinScore, setFilterMinScore] = useState(0);
   const [filterDateRange, setFilterDateRange] = useState('all'); // all, 7d, 30d, 90d
@@ -233,6 +237,37 @@ export const AdminDashboard: React.FC<{ onViewAssessment: () => void }> = ({ onV
       });
       const trendData = Object.entries(trendMap).map(([name, count]) => ({ name, count })).slice(-14);
 
+      // Enumerator Performance
+      const enumTracker: Record<string, { count: number, total: number }> = {};
+      filteredAssessments.forEach(a => {
+          const eid = a.enumeratorId || 'Anon';
+          if (!enumTracker[eid]) enumTracker[eid] = { count: 0, total: 0 };
+          enumTracker[eid].count++;
+          enumTracker[eid].total += (a.totalScore || 0);
+      });
+      const enumLeaderboard = Object.entries(enumTracker)
+          .map(([id, data]) => ({ id, count: data.count, avg: Math.round(data.total / data.count) }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 5);
+
+      // Geographic Distribution (By District - P4)
+      const geoTracker: Record<string, number> = {};
+      filteredAssessments.forEach(a => {
+          const district = a.probingAnswers?.P4 || 'Other';
+          geoTracker[district] = (geoTracker[district] || 0) + 1;
+      });
+      const geoData = Object.entries(geoTracker)
+          .map(([name, count]) => ({ name, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 8);
+
+      // Correlation (Business Size P10 vs Score)
+      const scatterData = filteredAssessments.map(a => ({
+          x: a.probingAnswers?.P10?.length || 0, // Using encoded length as proxy for size/tenure
+          y: a.totalScore || 0,
+          name: a.probingAnswers?.biz_name || 'SME'
+      }));
+
       return {
           avgScore: Math.round(avgScore),
           totalAssessments: filteredAssessments.length,
@@ -240,9 +275,66 @@ export const AdminDashboard: React.FC<{ onViewAssessment: () => void }> = ({ onV
           bizTypeData,
           domainData,
           lowScoringQuestions,
-          trendData
+          trendData,
+          enumLeaderboard,
+          geoData,
+          scatterData
       };
   }, [filteredAssessments]);
+
+  const distributionData = useMemo(() => {
+    if (!chartData) return [];
+    
+    const tracker: Record<string, number> = {};
+    filteredAssessments.forEach(a => {
+        const val = (a.probingAnswers as any)?.[selectedDistributionField] || 'Unspecified';
+        tracker[val] = (tracker[val] || 0) + 1;
+    });
+
+    return Object.entries(tracker)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+  }, [filteredAssessments, selectedDistributionField, chartData]);
+
+  const benchmarkData = useMemo(() => {
+    if (!chartData) return [];
+    
+    // Group records by dimension
+    const groups: Record<string, { total: number, count: number }> = {};
+    
+    filteredAssessments.forEach(a => {
+        const dimValue = (a.probingAnswers as any)?.[selectedBenchmarkDimension] || 'Unspecified';
+        if (!groups[dimValue]) groups[dimValue] = { total: 0, count: 0 };
+        
+        let score = 0;
+        if (selectedBenchmarkMetric === 'totalScore') {
+            score = a.totalScore || 0;
+        } else {
+            // Calculate domain specific average for this assessment
+            const domainScores = Object.entries(a.scores as Record<string, number> || {})
+                .filter(([qId]) => qId.startsWith(selectedBenchmarkMetric))
+                .map(([, s]) => s);
+            
+            if (domainScores.length > 0) {
+                const avgRaw = domainScores.reduce((sum, s) => sum + s, 0) / domainScores.length;
+                score = Math.round((avgRaw / 5) * 100); // Normalize 1-5 to 100%
+            }
+        }
+        
+        groups[dimValue].total += score;
+        groups[dimValue].count += 1;
+    });
+
+    return Object.entries(groups)
+        .map(([name, data]) => ({ 
+            name, 
+            score: Math.round(data.total / data.count),
+            count: data.count 
+        }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 12);
+  }, [filteredAssessments, selectedBenchmarkMetric, selectedBenchmarkDimension, chartData]);
 
   if (userProfile?.role !== 'admin') return null;
 
@@ -342,53 +434,53 @@ export const AdminDashboard: React.FC<{ onViewAssessment: () => void }> = ({ onV
       ) : chartData ? (
         <div className="space-y-10">
             {/* Top Stat Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+                <div className="bg-white p-8 rounded-[1.5rem] border border-gray-100 shadow-sm flex flex-col gap-3 group/stat transition-all hover:shadow-xl hover:-translate-y-1">
                     <div className="flex justify-between items-start">
-                        <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-lg">
+                        <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-xl shadow-inner group-hover/stat:bg-indigo-600 group-hover/stat:text-white transition-all">
                             <i className="fa-solid fa-clipboard-list"></i>
                         </div>
-                        <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full uppercase">Active</span>
+                        <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase tracking-tighter shadow-sm">Verified</span>
                     </div>
                     <div className="mt-2">
-                        <p className="text-3xl font-black text-gray-900">{chartData.totalAssessments}</p>
-                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Total Records</p>
+                        <p className="text-4xl font-display font-black text-gray-900 tracking-tighter">{chartData.totalAssessments}</p>
+                        <p className="text-xs font-black text-gray-400 uppercase tracking-widest mt-1">Total Submissions</p>
                     </div>
                 </div>
                 
-                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col gap-2">
+                <div className="bg-white p-8 rounded-[1.5rem] border border-gray-100 shadow-sm flex flex-col gap-3 group/stat transition-all hover:shadow-xl hover:-translate-y-1">
                     <div className="flex justify-between items-start">
-                        <div className="w-10 h-10 bg-green-50 text-green-600 rounded-xl flex items-center justify-center text-lg">
+                        <div className="w-12 h-12 bg-green-50 text-green-600 rounded-xl flex items-center justify-center text-xl shadow-inner group-hover/stat:bg-green-600 group-hover/stat:text-white transition-all">
                             <i className="fa-solid fa-gauge-high"></i>
                         </div>
-                        <span className="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full uppercase">Quality</span>
+                        <span className="text-[10px] font-black text-green-600 bg-green-50 px-3 py-1 rounded-full uppercase tracking-tighter shadow-sm">Economy</span>
                     </div>
                     <div className="mt-2">
-                        <p className="text-3xl font-black text-green-600">{chartData.avgScore}%</p>
-                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Mean Score</p>
+                        <p className="text-4xl font-display font-black text-green-600 tracking-tighter">{chartData.avgScore}%</p>
+                        <p className="text-xs font-black text-gray-400 uppercase tracking-widest mt-1">Mean Sustainability</p>
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm md:col-span-2 relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
-                        <i className="fa-solid fa-chart-line text-6xl text-indigo-900"></i>
+                <div className="bg-gray-900 p-8 rounded-[1.5rem] md:col-span-2 relative overflow-hidden group/trend shadow-2xl transition-all hover:shadow-indigo-500/20">
+                    <div className="absolute top-0 right-0 p-6 opacity-20 group-hover/trend:scale-125 transition-transform duration-700 pointer-events-none">
+                        <i className="fa-solid fa-chart-line text-7xl text-indigo-400"></i>
                     </div>
-                    <div className="flex justify-between items-start mb-2">
-                         <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-lg">
+                    <div className="relative z-10 flex justify-between items-start mb-4">
+                         <div className="w-12 h-12 bg-white/10 text-white rounded-xl flex items-center justify-center text-xl backdrop-blur-md border border-white/10">
                             <i className="fa-solid fa-arrow-trend-up"></i>
                         </div>
-                        <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mt-2">Volume Trend (Last 14 Records)</h4>
+                        <h4 className="text-[10px] font-black uppercase tracking-widest text-indigo-300 mt-2">Historical Growth Volume</h4>
                     </div>
-                    <div className="h-16 w-full">
+                    <div className="h-20 w-full relative z-10">
                          <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={chartData.trendData}>
                                 <defs>
                                     <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.1}/>
-                                    <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                                    <stop offset="5%" stopColor="#818cf8" stopOpacity={0.3}/>
+                                    <stop offset="95%" stopColor="#818cf8" stopOpacity={0}/>
                                     </linearGradient>
                                 </defs>
-                                <Area type="monotone" dataKey="count" stroke="#4f46e5" fillOpacity={1} fill="url(#colorCount)" strokeWidth={2} />
+                                <Area type="monotone" dataKey="count" stroke="#818cf8" fillOpacity={1} fill="url(#colorCount)" strokeWidth={3} dot={{r: 4, fill: '#818cf8', strokeWidth: 0}} />
                             </AreaChart>
                          </ResponsiveContainer>
                     </div>
@@ -396,47 +488,187 @@ export const AdminDashboard: React.FC<{ onViewAssessment: () => void }> = ({ onV
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-                {/* Domain Distribution */}
-                <div className="lg:col-span-3 bg-white p-8 rounded-3xl border border-gray-100 shadow-sm group">
-                    <div className="flex justify-between items-center mb-8">
-                        <h3 className="font-black text-gray-900 text-lg">Performance by Domain</h3>
-                        <i className="fa-solid fa-layer-group text-gray-300 group-hover:text-indigo-400 transition-colors"></i>
+                {/* Dynamic Distribution Analysis */}
+                <div className="lg:col-span-3 bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm transition-all hover:shadow-xl relative overflow-hidden group">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+                        <div>
+                            <h3 className="font-display font-black text-gray-900 text-xl tracking-tight">Distribution Analysis</h3>
+                            <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-1">Cross-sectional data insight</p>
+                        </div>
+                        <select 
+                            className="bg-gray-50 border-2 border-gray-100 text-gray-700 text-xs font-black rounded-xl px-4 py-2 hover:border-indigo-200 transition-colors focus:ring-4 focus:ring-indigo-100 outline-none"
+                            value={selectedDistributionField}
+                            onChange={(e) => setSelectedDistributionField(e.target.value)}
+                        >
+                            <optgroup label="SME Profiles">
+                                <option value="P4">Districts / Locations</option>
+                                <option value="P3">Business Registration Status</option>
+                                <option value="P10">Revenue Categories</option>
+                                <option value="P2">Sector Classification</option>
+                                <option value="P11">Employee Count</option>
+                            </optgroup>
+                        </select>
                     </div>
-                    <div className="h-72">
+
+                    <div className="h-80">
                          <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={chartData.domainData} layout="vertical">
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f3f4f6" />
-                                <XAxis type="number" domain={[0, 5]} hide />
-                                <YAxis dataKey="name" type="category" width={40} axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 700}} />
-                                <RechartsTooltip 
-                                    contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
+                            <BarChart data={distributionData} layout="vertical" margin={{ left: 10, right: 30 }}>
+                                <XAxis type="number" hide />
+                                <YAxis 
+                                    dataKey="name" 
+                                    type="category" 
+                                    width={140} 
+                                    axisLine={false} 
+                                    tickLine={false} 
+                                    tick={(props) => (
+                                        <g transform={`translate(${props.x},${props.y})`}>
+                                            <text
+                                                x={-10}
+                                                y={0}
+                                                dy={4}
+                                                textAnchor="end"
+                                                fill="#64748b"
+                                                fontSize={9}
+                                                fontWeight={900}
+                                                className="uppercase"
+                                            >
+                                                {props.payload.value.length > 20 ? `${props.payload.value.substring(0, 20)}...` : props.payload.value}
+                                            </text>
+                                        </g>
+                                    )} 
                                 />
-                                <Bar dataKey="value" fill="#10b981" radius={[0, 8, 8, 0]} barSize={20} />
+                                <RechartsTooltip 
+                                    cursor={{fill: '#f8fafc'}}
+                                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px'}}
+                                />
+                                <Bar dataKey="count" fill="#4f46e5" radius={[0, 8, 8, 0]} barSize={24} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
+                    <div className="mt-4 flex items-center justify-between">
+                        <p className="text-[10px] font-bold text-gray-400 italic">Showing top frequencies from {chartData.totalAssessments} submissions</p>
+                        <i className="fa-solid fa-chart-simple text-indigo-100 text-4xl transform group-hover:scale-120 transition-transform"></i>
+                    </div>
                 </div>
 
-                {/* Business Types Pie */}
-                <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-gray-100 shadow-sm relative group overflow-hidden">
-                    <h3 className="font-black text-gray-900 text-lg mb-8">SME Sectors</h3>
-                    {chartData.bizTypeData.length > 0 ? (
-                        <div className="h-72">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie data={chartData.bizTypeData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={8} stroke="none">
-                                        {chartData.bizTypeData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.color} />
-                                        ))}
-                                    </Pie>
-                                    <RechartsTooltip />
-                                    <Legend iconType="circle" />
-                                </PieChart>
-                            </ResponsiveContainer>
+                {/* Size vs Score Correlation (Moved next to it for context) */}
+                <div className="lg:col-span-2 bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm relative group overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-rose-50 rounded-full blur-[80px] -mr-16 -mt-16"></div>
+                    <h3 className="font-display font-black text-gray-900 text-xl tracking-tight mb-2">Performance Link</h3>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-8">Business Size vs Sustainability Score</p>
+                    <div className="h-72">
+                         <ResponsiveContainer width="100%" height="100%">
+                            <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} horizontal={false} stroke="#f1f5f9" />
+                                <XAxis type="number" dataKey="x" name="Revenue Category" hide />
+                                <YAxis type="number" dataKey="y" name="Score" unit="%" tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 700}} axisLine={false} tickLine={false} />
+                                <ZAxis type="number" range={[100, 500]} />
+                                <RechartsTooltip cursor={{ strokeDasharray: '3 3' }} />
+                                <Scatter name="SMEs" data={chartData.scatterData} fill="#f43f5e" />
+                            </ScatterChart>
+                        </ResponsiveContainer>
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-gray-50 flex justify-between items-center">
+                        <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter italic">Correlation analysis</span>
+                        <div className="flex items-center gap-2">
+                             <div className="w-2 h-2 bg-rose-500 rounded-full"></div>
+                             <span className="text-[9px] font-black text-gray-900 uppercase">Individual SME</span>
                         </div>
-                    ) : (
-                        <div className="h-72 flex items-center justify-center text-gray-400 italic">No sector data</div>
-                    )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Benchmarking Lab - New Interactive Section */}
+            <div className="bg-gray-50 p-10 rounded-[3rem] border border-gray-100 shadow-inner group">
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 mb-12">
+                    <div className="space-y-1">
+                        <h3 className="text-3xl font-display font-black text-gray-900 tracking-tight">Benchmarking Lab</h3>
+                        <p className="text-sm font-medium text-gray-400 italic">Advanced cross-tabulation of sustainability metrics against business dimensions.</p>
+                    </div>
+                    
+                    <div className="flex flex-wrap items-center gap-4 bg-white p-3 rounded-2xl shadow-sm border border-gray-100">
+                        <div className="space-y-1">
+                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-2">Select Metric</label>
+                            <select 
+                                value={selectedBenchmarkMetric}
+                                onChange={(e) => setSelectedBenchmarkMetric(e.target.value)}
+                                className="bg-transparent text-xs font-bold text-gray-700 focus:outline-none cursor-pointer hover:text-indigo-600 transition-colors"
+                            >
+                                <option value="totalScore">Total Maturity Score</option>
+                                {DOMAINS.map(d => <option key={d.code} value={d.code}>{d.name.en} Performance</option>)}
+                            </select>
+                        </div>
+                        <div className="h-8 w-px bg-gray-100"></div>
+                        <div className="space-y-1">
+                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-2">Group By</label>
+                            <select 
+                                value={selectedBenchmarkDimension}
+                                onChange={(e) => setSelectedBenchmarkDimension(e.target.value)}
+                                className="bg-transparent text-xs font-bold text-gray-700 focus:outline-none cursor-pointer hover:text-indigo-600 transition-colors"
+                            >
+                                <option value="P4">District / Location</option>
+                                <option value="P10">Revenue Tier</option>
+                                <option value="P2">Business Sector</option>
+                                <option value="P3">Registration Status</option>
+                                <option value="P11">Workforce Size</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="h-[400px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={benchmarkData} margin={{ top: 20, right: 30, left: 40, bottom: 60 }}>
+                            <defs>
+                                <linearGradient id="benchmarkGradient" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="#4f46e5" stopOpacity={1}/>
+                                    <stop offset="100%" stopColor="#818cf8" stopOpacity={0.8}/>
+                                </linearGradient>
+                            </defs>
+                            <XAxis 
+                                dataKey="name" 
+                                axisLine={false} 
+                                tickLine={false} 
+                                tick={(props) => (
+                                    <g transform={`translate(${props.x},${props.y})`}>
+                                        <text x={0} y={0} dy={16} textAnchor="end" fill="#94a3b8" fontSize={9} fontWeight={800} transform="rotate(-35)">
+                                            {props.payload.value}
+                                        </text>
+                                    </g>
+                                )}
+                            />
+                            <YAxis 
+                                domain={[0, 100]} 
+                                axisLine={false} 
+                                tickLine={false} 
+                                tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 700}}
+                                unit="%"
+                            />
+                            <RechartsTooltip 
+                                cursor={{fill: 'rgba(79, 70, 229, 0.05)'}}
+                                content={({ active, payload }) => {
+                                    if (active && payload && payload.length) {
+                                        return (
+                                            <div className="bg-white p-4 shadow-2xl rounded-2xl border border-gray-100">
+                                                <p className="text-[10px] font-black uppercase text-gray-400 mb-1">{payload[0].payload.name}</p>
+                                                <p className="text-xl font-display font-black text-indigo-600">{payload[0].value}%</p>
+                                                <p className="text-[9px] font-bold text-gray-400 mt-2 italic">Based on {payload[0].payload.count} records</p>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                }}
+                            />
+                            <Bar 
+                                dataKey="score" 
+                                fill="url(#benchmarkGradient)" 
+                                radius={[12, 12, 0, 0]} 
+                                barSize={45}
+                                animationDuration={1500}
+                                animationEasing="ease-out"
+                            />
+                        </BarChart>
+                    </ResponsiveContainer>
                 </div>
             </div>
 

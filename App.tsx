@@ -11,6 +11,10 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import Markdown from 'react-markdown';
+import { 
+    ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+    RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar 
+} from 'recharts';
 
 declare global {
   interface Window {
@@ -20,6 +24,20 @@ declare global {
 }
 
 // --- Helper functions ---
+const getScoreInterpretation = (score: number) => {
+    // Find the matching range from SCORE_INTERPRETATIONS (defined in constants.ts)
+    // and adapt it for the UI's specific field names if necessary
+    const interpretation = SCORE_INTERPRETATIONS.find(i => score >= i.minScore) || SCORE_INTERPRETATIONS[SCORE_INTERPRETATIONS.length - 1];
+    
+    return {
+        rating: {
+            level: interpretation.rating.level,
+            color: interpretation.textColor // Map textColor to the 'color' field used in UI
+        },
+        recommendation: interpretation.rating.actions // Map actions to 'recommendation'
+    };
+};
+
 const getInitialScores = (questions: MainQuestion[]) => {
   return questions.reduce<{ [key: string]: number }>((acc, question) => {
     acc[question.id] = -2; // -2 represents an unanswered question, -1 will be N/A
@@ -70,23 +88,23 @@ const ProbingQuestionComponent: React.FC<{ index: number; question: ProbingQuest
     }
 
     return (
-        <div className={`mb-6 p-5 rounded-xl border-l-4 transition-all duration-300 shadow-sm ${
+        <div className={`mb-3 sm:mb-6 p-3 sm:p-5 rounded-xl border-l-4 transition-all duration-300 shadow-sm ${
             isAnswered 
                 ? 'border-green-500 bg-green-50' 
                 : 'border-gray-300 bg-gray-50 hover:border-gray-400'
         }`}>
-            <label className="block text-lg font-semibold text-gray-800 mb-4 flex items-start gap-3">
-                <span className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold shrink-0 mt-0.5 shadow-sm ${
+            <label className="block text-base sm:text-lg font-semibold text-gray-800 mb-2 sm:mb-4 flex items-start gap-2 sm:gap-3">
+                <span className={`flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full text-xs sm:text-sm font-bold shrink-0 mt-0.5 shadow-sm ${
                     isAnswered ? 'bg-green-500 text-white' : 'bg-white text-gray-600 border border-gray-300'
                 }`}>
                     {isAnswered ? <i className="fa-solid fa-check"></i> : index}
                 </span>
                 <span>
                     {question.text[language]}
-                    {isRequired && <span className="text-red-500 ml-1.5 align-top text-xl" title={language === 'en' ? 'Required' : 'আবশ্যক'}>*</span>}
+                    {isRequired && <span className="text-red-500 ml-1 align-top text-lg sm:text-xl" title={language === 'en' ? 'Required' : 'আবশ্যক'}>*</span>}
                 </span>
             </label>
-            <div className="ml-11">
+            <div className="ml-9 sm:ml-11">
                 {question.type === 'text' && (
                     <input 
                         type="text" 
@@ -203,28 +221,32 @@ const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="container mx-auto p-4 sm:p-8 hover-effects-enabled"
+            className="container mx-auto p-2 sm:p-8 hover-effects-enabled"
         >
-            <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl p-6 sm:p-10 border border-gray-100 relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-2 bg-gray-100">
+            <div className="max-w-3xl mx-auto bg-white rounded-3xl shadow-2xl p-6 sm:p-12 border border-gray-100 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1.5 bg-gray-100">
                     <div 
-                        className="h-full bg-green-500 transition-all duration-500 ease-out"
+                        className="h-full bg-green-500 transition-all duration-700 ease-out"
                         style={{ width: `${requiredQuestions.length > 0 ? (answeredCount / requiredQuestions.length) * 100 : 0}%` }}
                     ></div>
                 </div>
 
-                <div className="flex justify-between items-center mt-2 mb-3">
-                    <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-800 tracking-tight flex-grow text-center">{language === 'en' ? 'Tell us about your business' : 'আপনার ব্যবসা সম্পর্কে আমাদের বলুন'}</h2>
+                <div className="flex flex-col sm:flex-row justify-between items-center mt-4 mb-4 gap-4">
+                    <h2 className="text-3xl sm:text-4xl font-display font-bold text-gray-900 tracking-tight flex-grow text-center sm:text-left">{language === 'en' ? 'Tell us about your business' : 'আপনার ব্যবসা সম্পর্কে আমাদের বলুন'}</h2>
                     {isAdmin && (
-                        <button onClick={handleAutoFill} className="shrink-0 px-3 py-1 bg-purple-100 text-purple-700 rounded-md shadow-sm hover:bg-purple-200 font-bold text-sm">
-                            <i className="fa-solid fa-bolt mr-1"></i> Auto-Fill
+                        <button onClick={handleAutoFill} className="shrink-0 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl shadow-sm hover:bg-indigo-100 font-bold text-xs flex items-center gap-2 transition-colors">
+                            <i className="fa-solid fa-bolt"></i> Auto-Fill
                         </button>
                     )}
                 </div>
-                <p className="text-center text-gray-600 mb-2 text-lg">{language === 'en' ? 'Your answers will help us create a personalized assessment.' : 'আপনার উত্তর আমাদের একটি ব্যক্তিগত মূল্যায়ন তৈরি করতে সাহায্য করবে।'}</p>
-                <div className="flex justify-center mb-8">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 text-sm font-semibold rounded-full border border-green-200">
-                        <i className="fa-solid fa-tasks"></i> {answeredCount} / {requiredQuestions.length} {language === 'en' ? 'completed' : 'সম্পন্ন হয়েছে'}
+                <p className="text-center sm:text-left text-gray-500 mb-8 text-lg font-medium">{language === 'en' ? 'Your answers help us tailor the assessment to your specific context.' : 'আপনার উত্তর আমাদের একটি ব্যক্তিগত মূল্যায়ন তৈরি করতে সাহায্য করবে।'}</p>
+                <div className="flex justify-center sm:justify-start mb-8">
+                    <span className="inline-flex items-center gap-2 px-4 py-1.5 bg-green-50 text-green-700 text-sm font-bold rounded-full border border-green-100 shadow-sm">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                        </span>
+                        {answeredCount} / {requiredQuestions.length} {language === 'en' ? 'Completed' : 'সম্পন্ন হয়েছে'}
                     </span>
                 </div>
                 
@@ -277,34 +299,37 @@ const QuestionRow: React.FC<{
     const isAnswered = currentScore !== -2;
 
     return (
-        <div className={`grid grid-cols-1 md:grid-cols-[1fr_1.5fr] gap-6 items-center p-5 rounded-xl border-l-4 transition-all duration-300 shadow-sm mb-4 ${
+        <div className={`grid grid-cols-1 md:grid-cols-[1fr_1.5fr] gap-4 md:gap-8 items-center p-4 sm:p-6 rounded-2xl border-l-4 transition-all duration-300 shadow-sm mb-4 ${
             isAnswered 
-                ? 'border-green-500 bg-green-50/20' 
-                : 'border-blue-300 bg-blue-50/20 hover:border-blue-400'
+                ? 'border-green-500 bg-white' 
+                : 'border-indigo-200 bg-white hover:border-indigo-400'
         }`}>
-            <div className="flex items-start gap-3">
-                <span className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold shrink-0 mt-0.5 shadow-sm ${
-                    isAnswered ? 'bg-green-500 text-white' : 'bg-white text-blue-700 border border-blue-200'
+            <div className="flex items-start gap-3 sm:gap-4">
+                <span className={`flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-xl text-sm sm:text-base font-bold shrink-0 mt-0.5 shadow-sm transition-colors ${
+                    isAnswered ? 'bg-green-500 text-white' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
                 }`}>
                     {isAnswered ? <i className="fa-solid fa-check"></i> : index}
                 </span>
                 <div>
-                    <label className="font-semibold text-gray-800 text-lg cursor-pointer">
+                    <label className="font-bold text-gray-900 text-base sm:text-lg cursor-pointer leading-tight block mb-1">
                         {question.text[language]}
-                        <span className="text-red-500 ml-1.5 align-top text-xl" title={language === 'en' ? 'Required' : 'আবশ্যক'}>*</span>
+                        <span className="text-red-500 ml-1 align-top text-lg sm:text-xl" title={language === 'en' ? 'Required' : 'আবশ্যক'}>*</span>
                     </label>
-                    <p className="text-sm text-gray-500 mt-1 capitalize"><i className="fa-solid fa-weight-hanging mr-1"></i>{language === 'en' ? 'Weight:' : 'ওজন:'} {question.weightPriority}</p>
+                    <p className="text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <i className="fa-solid fa-shield-halved text-indigo-300"></i>
+                        {language === 'en' ? 'Priority:' : 'অগ্রাধিকার:'} {question.weightPriority}
+                    </p>
                 </div>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-4">
                <select 
                    value={currentScore} 
                    onChange={(e) => onScoreChange(question.id, parseInt(e.target.value, 10))} 
-                   className={`flex-grow w-full p-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors ${
-                       isAnswered ? 'border-green-300 bg-white' : 'border-gray-300'
+                   className={`flex-grow w-full p-3.5 border-2 rounded-xl shadow-sm font-semibold focus:ring-4 focus:ring-green-500/10 focus:border-green-500 transition-all ${
+                       isAnswered ? 'border-green-100 bg-green-50/10' : 'border-gray-100 bg-gray-50/30'
                    }`}
                >
-                 <option value="-2" disabled>{language === 'en' ? 'Select an option...' : 'একটি বিকল্প নির্বাচন করুন...'}</option>
+                 <option value="-2" disabled>{language === 'en' ? 'Select performance level...' : 'একটি বিকল্প নির্বাচন করুন...'}</option>
                  {SCORING_OPTIONS.map(option => (
                     <option key={option.score} value={option.score}>{option.text[language]}</option>
                  ))}
@@ -340,19 +365,31 @@ const DomainCard: React.FC<{
   const displayScore = maxPossible > 0 ? Math.round((totalScore / maxPossible) * 100) : 0;
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6 mb-8 transition-shadow hover:shadow-xl">
-      <div className="flex justify-between items-start mb-6">
+    <div className="bg-white rounded-3xl shadow-xl p-6 sm:p-8 mb-8 border border-gray-100 transition-all hover:shadow-2xl">
+      <div className="flex justify-between items-center mb-8 border-b border-gray-50 pb-6">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-2xl shrink-0">
+          <div className="w-14 h-14 bg-green-600 text-white rounded-2xl flex items-center justify-center text-3xl shrink-0 shadow-lg shadow-green-100">
                <i className={domainGroup.domain.icon}></i>
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-green-800">{domainGroup.domain.name[language]}</h2>
-            <p className="text-gray-500">{domainGroup.questions.length} Questions</p>
+            <h2 className="text-2xl sm:text-3xl font-display font-bold text-gray-900 leading-tight">{domainGroup.domain.name[language]}</h2>
+            <p className="text-xs font-black text-gray-400 uppercase tracking-widest mt-1">{domainGroup.questions.length} Indicators under assessment</p>
           </div>
         </div>
         <div className="text-right">
-            <p className="text-3xl font-bold text-green-700">{displayScore}%</p>
+            <div className="relative inline-flex items-center justify-center">
+                <svg className="w-16 h-16 transform -rotate-90">
+                    <circle cx="32" cy="32" r="28" fill="none" stroke="#f1f5f9" strokeWidth="6" />
+                    <circle 
+                        cx="32" cy="32" r="28" fill="none" 
+                        stroke="#16a34a" strokeWidth="6" 
+                        strokeDasharray="176" 
+                        strokeDashoffset={176 - (176 * displayScore) / 100}
+                        strokeLinecap="round"
+                    />
+                </svg>
+                <p className="absolute text-sm font-black text-green-700">{displayScore}%</p>
+            </div>
         </div>
       </div>
       <div className="space-y-4">
@@ -394,47 +431,47 @@ const ResultsSummaryCard: React.FC<{ totalScore: number; language: Language; }> 
   }, [totalScore]);
 
   return (
-    <div className="bg-white rounded-2xl shadow-xl p-8 sm:p-12 my-8 border border-gray-100 relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-full h-2 bg-gray-100">
+    <div className="bg-white rounded-[2rem] shadow-2xl p-8 sm:p-16 my-12 border border-gray-100 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-1.5 bg-gray-100">
         <div className={`h-full ${interpretation.colorClass} transition-all duration-1000`} style={{ width: `${totalScore}%` }}></div>
       </div>
       
-      <div className="flex flex-col lg:flex-row items-center gap-12">
+      <div className="flex flex-col lg:flex-row items-center gap-16">
         <div className="shrink-0 relative">
           <ScoreGauge score={totalScore} />
-          <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap">
-             <span className={`px-4 py-1.5 rounded-full text-sm font-black text-white shadow-lg ${interpretation.colorClass} border-2 border-white animate-bounce`}>
+          <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap">
+             <span className={`px-6 py-2 rounded-2xl text-xs font-black text-white shadow-xl ${interpretation.colorClass} border-4 border-white transform hover:scale-110 transition-transform cursor-default uppercase tracking-tight`}>
                 {interpretation.rating.level[language]}
              </span>
           </div>
         </div>
         
         <div className="flex-grow text-center lg:text-left">
-          <h2 className="text-4xl font-black text-gray-900 tracking-tight mb-4">
-            {language === 'en' ? 'Assessment Results' : 'মূল্যায়ন ফলাফল'}
+          <h2 className="text-4xl sm:text-5xl font-display font-black text-gray-900 tracking-tight mb-6 leading-tight">
+            {language === 'en' ? 'SME Maturity Report' : 'মূল্যায়ন ফলাফল'}
           </h2>
-          <p className="text-xl text-gray-600 leading-relaxed max-w-2xl">
-            {interpretation.rating.meaning[language]}
+          <p className="text-xl text-gray-500 leading-relaxed max-w-2xl font-medium italic">
+            "{interpretation.rating.meaning[language]}"
           </p>
           
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-5 bg-green-50 rounded-2xl border border-green-100 flex items-start gap-4">
-              <div className="w-10 h-10 bg-green-100 text-green-600 rounded-xl flex items-center justify-center shrink-0">
+          <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="p-6 bg-green-50/50 rounded-3xl border border-green-100/50 flex items-start gap-5 group hover:bg-green-50 transition-colors">
+              <div className="w-12 h-12 bg-green-600 text-white rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-green-100 transition-transform group-hover:rotate-6">
                 <i className="fa-solid fa-lightbulb"></i>
               </div>
               <div>
-                <h4 className="font-black text-green-900 text-sm uppercase tracking-wider mb-1">{language === 'en' ? 'Key Action' : 'প্রধান পদক্ষেপ'}</h4>
-                <p className="text-green-800 font-medium text-sm leading-relaxed">{interpretation.rating.actions[language]}</p>
+                <h4 className="font-black text-green-900 text-[10px] uppercase tracking-[0.2em] mb-2">{language === 'en' ? 'Strategic Focus' : 'প্রধান পদক্ষেপ'}</h4>
+                <p className="text-green-800 font-bold text-sm leading-snug">{interpretation.rating.actions[language]}</p>
               </div>
             </div>
             
-            <div className="p-5 bg-blue-50 rounded-2xl border border-blue-100 flex items-start gap-4">
-              <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
-                <i className="fa-solid fa-chart-simple"></i>
+            <div className="p-6 bg-indigo-50/50 rounded-3xl border border-indigo-100/50 flex items-start gap-5 group hover:bg-indigo-50 transition-colors">
+              <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-indigo-100 transition-transform group-hover:-rotate-6">
+                <i className="fa-solid fa-chart-line"></i>
               </div>
               <div>
-                <h4 className="font-black text-blue-900 text-sm uppercase tracking-wider mb-1">{language === 'en' ? 'SME Average' : 'এসএমই গড়'}</h4>
-                <p className="text-blue-800 font-medium text-sm">Most businesses score between 40-55. You are doing {totalScore > 50 ? 'better than average!' : 'well, with room to grow.'}</p>
+                <h4 className="font-black text-indigo-900 text-[10px] uppercase tracking-[0.2em] mb-2">{language === 'en' ? 'Benchmarking' : 'এসএমই গড়'}</h4>
+                <p className="text-indigo-800 font-bold text-sm leading-snug">Average SME score: 48%. Your business is {totalScore > 48 ? 'leading' : 'emerging in'} the green transition.</p>
               </div>
             </div>
           </div>
@@ -456,10 +493,41 @@ const InfoSection: React.FC<{ language: Language; }> = ({ language }) => (
     </div>
 );
 
-const AIRecommendations: React.FC<{ scores: { [key: string]: number }; assessmentData: { domain: Domain; questions: MainQuestion[] }[]; probingAnswers: ProbingAnswers; language: Language; isGuest: boolean; }> = ({ scores, assessmentData, probingAnswers, language, isGuest }) => {
+const AIRecommendations: React.FC<{ 
+    scores: { [key: string]: number }; 
+    assessmentData: { domain: Domain; questions: MainQuestion[] }[]; 
+    probingAnswers: ProbingAnswers; 
+    language: Language; 
+    isGuest: boolean; 
+}> = ({ scores, assessmentData, probingAnswers, language, isGuest }) => {
     const [recommendations, setRecommendations] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+
+    const totalScoreVal = useMemo(() => {
+        let total = 0;
+        let max = 0;
+        assessmentData.forEach(d => {
+            d.questions.forEach(q => {
+                total += (scores[q.id] || 0);
+                max += 5;
+            });
+        });
+        return max > 0 ? Math.round((total / max) * 100) : 0;
+    }, [assessmentData, scores]);
+
+    const radarData = useMemo(() => {
+        return assessmentData.map(d => {
+            const score = d.questions.reduce((sum, q) => sum + (scores[q.id] || 0), 0) / d.questions.length;
+            return {
+                domain: d.domain.name[language],
+                current: Number(score.toFixed(1)),
+                benchmark: 4.2
+            };
+        });
+    }, [assessmentData, scores, language]);
+
+    const interpretation = getScoreInterpretation(totalScoreVal);
 
     const generateRecommendations = async () => {
         if (isGuest) {
@@ -544,22 +612,24 @@ Now, provide your expert recommendations tailored to the specific business profi
 
     return (
         <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-            className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden my-12"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            className="bg-white rounded-[2rem] shadow-2xl border border-gray-100 overflow-hidden my-16 group/card"
         >
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-8 text-white relative overflow-hidden">
-               <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16 animate-pulse"></div>
-               <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
-                   <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-3xl shadow-lg border border-white/20 transform rotate-3">
+            <div className="bg-gray-950 p-10 text-white relative overflow-hidden">
+               <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600/20 rounded-full blur-[100px] -mr-48 -mt-48"></div>
+               <div className="absolute bottom-0 left-0 w-64 h-64 bg-green-600/10 rounded-full blur-[80px] -ml-32 -mb-32"></div>
+               <div className="relative z-10 flex flex-col md:flex-row items-center gap-8">
+                   <div className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-blue-700 rounded-[1.5rem] flex items-center justify-center text-4xl shadow-2xl transform group-hover/card:rotate-12 transition-transform duration-500">
                        <i className="fa-solid fa-wand-magic-sparkles"></i>
                    </div>
                    <div className="text-center md:text-left">
-                       <h2 className="text-3xl font-black tracking-tight">{language === 'en' ? 'SME Green Growth Strategies' : 'এসএমই গ্রিন গ্রোথ কৌশল'}</h2>
-                       <p className="text-blue-100 mt-2 font-medium">
+                       <h2 className="text-4xl font-display font-black tracking-tight uppercase leading-none">{language === 'en' ? 'Tailored Growth Strategy' : 'বিশেষায়িত কৌশল'}</h2>
+                       <p className="text-gray-400 mt-3 font-medium text-lg">
                            {language === 'en' 
-                             ? 'AI-powered insights specifically tailored for your business context in Bangladesh.' 
+                             ? 'AI-driven insights powered by Gemini for your specific industry context in Bangladesh.' 
                              : 'আপনার ব্যবসার প্রেক্ষাপটে বিশেষভাবে তৈরি এআই-চালিত অন্তর্দৃষ্টি।'}
                        </p>
                    </div>
@@ -594,15 +664,73 @@ Now, provide your expert recommendations tailored to the specific business profi
                     </div>
                 )}
 
-                {!loading && !error && (
-                    <motion.div 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: 0.2 }}
-                        className="markdown-recommendations prose prose-lg prose-slate max-w-none prose-headings:text-indigo-900 prose-headings:font-black prose-p:text-gray-700 prose-li:text-gray-700 prose-strong:text-indigo-700"
-                    >
-                        <Markdown>{recommendations}</Markdown>
-                    </motion.div>
+                 {!loading && !error && (
+                    <div className="space-y-12">
+                        {/* Visual KPIs Section */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-4">
+                            {/* Score Gauge */}
+                            <div className="bg-indigo-50/30 p-8 rounded-3xl border border-indigo-100 flex flex-col items-center group">
+                                <h3 className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-8 self-start">Maturity Status</h3>
+                                <div className="relative flex items-center justify-center w-56 h-56 transform group-hover:scale-105 transition-transform duration-500">
+                                    <svg className="w-full h-full transform -rotate-90">
+                                        <circle cx="112" cy="112" r="90" fill="none" stroke="#e0e7ff" strokeWidth="14" />
+                                        <circle 
+                                            cx="112" cy="112" r="90" fill="none" 
+                                            stroke={interpretation.rating.color.includes('green') ? '#10b981' : interpretation.rating.color.includes('orange') ? '#f59e0b' : '#ef4444'} 
+                                            strokeWidth="14" 
+                                            strokeDasharray="565" 
+                                            strokeDashoffset={565 - (565 * totalScoreVal) / 100}
+                                            strokeLinecap="round"
+                                            className="transition-all duration-1000 ease-out"
+                                        />
+                                    </svg>
+                                    <div className="absolute flex flex-col items-center">
+                                        <span className="text-5xl font-black text-gray-900 leading-none">{totalScoreVal}%</span>
+                                        <span className={`text-[10px] font-black uppercase tracking-wider mt-2 ${interpretation.rating.color}`}>{interpretation.rating.level[language]}</span>
+                                    </div>
+                                </div>
+                                <div className="mt-8 pt-6 border-t border-indigo-100 w-full text-center">
+                                    <p className="text-sm text-indigo-900 font-bold opacity-80">{interpretation.recommendation[language]}</p>
+                                </div>
+                            </div>
+
+                            {/* Comparison Radar */}
+                            <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
+                                <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-8">Performance vs Benchmark</h3>
+                                <div className="h-64">
+                                     <ResponsiveContainer width="100%" height="100%">
+                                        <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
+                                            <PolarGrid stroke="#f1f5f9" />
+                                            <PolarAngleAxis dataKey="domain" tick={{fill: '#94a3b8', fontSize: 9, fontWeight: 700}} />
+                                            <PolarRadiusAxis angle={30} domain={[0, 5]} hide />
+                                            <Radar name="Current" dataKey="current" stroke="#4f46e5" fill="#4f46e5" fillOpacity={0.4} />
+                                            <Radar name="Benchmark" dataKey="benchmark" stroke="#cbd5e1" fill="#f8fafc" fillOpacity={0.1} />
+                                            <Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
+                                        </RadarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                                <div className="mt-4 flex justify-center gap-6">
+                                     <div className="flex items-center gap-2">
+                                         <span className="w-2 h-2 bg-indigo-600 rounded-full"></span>
+                                         <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Your SME</span>
+                                     </div>
+                                     <div className="flex items-center gap-2">
+                                         <span className="w-2 h-2 bg-gray-200 rounded-full"></span>
+                                         <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Best Practice</span>
+                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <motion.div 
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.2 }}
+                            className="bg-indigo-50/20 p-8 sm:p-10 rounded-3xl border border-indigo-50/50 markdown-recommendations prose prose-lg prose-slate max-w-none prose-headings:text-indigo-900 prose-headings:font-black prose-p:text-gray-700 prose-li:text-gray-700 prose-strong:text-indigo-700"
+                        >
+                            <Markdown>{recommendations}</Markdown>
+                        </motion.div>
+                    </div>
                 )}
             </div>
             
@@ -742,44 +870,53 @@ const AssessmentScreen: React.FC<{
 
 const DetailedReportTable: React.FC<{ assessmentData: { domain: Domain; questions: MainQuestion[] }[]; scores: Record<string, number>; language: Language }> = ({ assessmentData, scores, language }) => {
     return (
-        <div className="mt-12 pt-12 border-t border-gray-200">
-            <h3 className="text-2xl font-black text-gray-900 mb-8 border-l-4 border-indigo-600 pl-4">
-                {language === 'en' ? 'Detailed Analysis Report' : 'বিস্তারিত বিশ্লেষণ রিপোর্ট'}
+        <div className="mt-20 pt-20 border-t border-gray-100 relative overflow-hidden">
+            <div className="absolute top-20 right-0 w-64 h-64 bg-indigo-50 rounded-full blur-3xl opacity-50 -z-10"></div>
+            <h3 className="text-3xl font-display font-black text-gray-900 mb-10 tracking-tight flex items-center gap-4">
+                <span className="w-1.5 h-10 bg-indigo-600 rounded-full"></span>
+                {language === 'en' ? 'Internal Analysis Report' : 'বিস্তারিত বিশ্লেষণ রিপোর্ট'}
             </h3>
-            <div className="space-y-12">
+            <div className="space-y-16">
                 {assessmentData.map(domain => (
                     <div key={domain.domain.code} className="break-inside-avoid">
-                        <h4 className="text-lg font-bold text-indigo-900 mb-4 bg-indigo-50 p-3 rounded-lg flex justify-between items-center">
-                            <span>{domain.domain.name[language]}</span>
-                            <span className="text-sm font-black opacity-50">#{domain.domain.code}</span>
-                        </h4>
-                        <div className="overflow-hidden border border-gray-100 rounded-xl">
+                        <div className="flex items-center justify-between mb-6">
+                            <h4 className="text-xl font-bold text-gray-900 flex items-center gap-3">
+                                <span className="text-xs font-black bg-gray-100 text-gray-400 px-2 py-0.5 rounded uppercase tracking-tighter">#{domain.domain.code}</span>
+                                {domain.domain.name[language]}
+                            </h4>
+                            <div className="h-px bg-gray-100 flex-grow mx-6"></div>
+                        </div>
+                        <div className="overflow-hidden border border-gray-100 rounded-[2rem] shadow-sm">
                             <table className="w-full text-left text-sm">
-                                <thead className="bg-gray-50 border-b border-gray-100">
+                                <thead className="bg-gray-50/50">
                                     <tr>
-                                        <th className="p-4 font-black uppercase tracking-widest text-[10px] text-gray-400 w-1/2">{language === 'en' ? 'Question' : 'প্রশ্ন'}</th>
-                                        <th className="p-4 font-black uppercase tracking-widest text-[10px] text-gray-400">{language === 'en' ? 'Score' : 'স্কোর'}</th>
-                                        <th className="p-4 font-black uppercase tracking-widest text-[10px] text-gray-400">{language === 'en' ? 'Status' : 'অবস্থা'}</th>
+                                        <th className="p-6 font-black uppercase tracking-widest text-[10px] text-gray-400">{language === 'en' ? 'Indicator Description' : 'প্রশ্ন'}</th>
+                                        <th className="p-6 font-black uppercase tracking-widest text-[10px] text-gray-400 text-center">{language === 'en' ? 'Level' : 'স্কোর'}</th>
+                                        <th className="p-6 font-black uppercase tracking-widest text-[10px] text-gray-400 text-right">{language === 'en' ? 'Assessment' : 'অবস্থা'}</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-50">
+                                <tbody className="divide-y divide-gray-50 bg-white">
                                     {domain.questions.map(q => {
                                         const score = scores[q.id];
                                         const option = SCORING_OPTIONS.find(o => o.score === score);
                                         return (
-                                            <tr key={q.id}>
-                                                <td className="p-4 text-gray-700 font-medium">{q.text[language]}</td>
-                                                <td className="p-4">
-                                                    <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-black text-xs ${
-                                                        score >= 3 ? 'bg-green-100 text-green-700' :
-                                                        score >= 2 ? 'bg-orange-100 text-orange-700' :
-                                                        'bg-red-100 text-red-700'
-                                                    }`}>
-                                                        {score}
-                                                    </span>
+                                            <tr key={q.id} className="group hover:bg-gray-50/30 transition-colors">
+                                                <td className="p-6 text-gray-700 font-medium leading-relaxed">{q.text[language]}</td>
+                                                <td className="p-6">
+                                                    <div className="flex justify-center">
+                                                        <span className={`inline-flex items-center justify-center w-10 h-10 rounded-xl font-black text-xs shadow-sm ${
+                                                            score >= 3 ? 'bg-green-600 text-white shadow-green-100' :
+                                                            score >= 2 ? 'bg-orange-500 text-white shadow-orange-100' :
+                                                            'bg-red-500 text-white shadow-red-100'
+                                                        }`}>
+                                                            {score}
+                                                        </span>
+                                                    </div>
                                                 </td>
-                                                <td className="p-4 text-xs font-semibold text-gray-500 whitespace-nowrap">
-                                                    {option?.text[language].split('-')[1]?.trim() || option?.text[language]}
+                                                <td className="p-6 text-xs font-black text-gray-400 uppercase tracking-widest text-right">
+                                                    <span className={score >= 3 ? 'text-green-600' : score >= 2 ? 'text-orange-600' : 'text-red-600'}>
+                                                        {option?.text[language].split('-')[1]?.trim() || option?.text[language]}
+                                                    </span>
                                                 </td>
                                             </tr>
                                         );
@@ -1294,20 +1431,16 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#fcfdfc] text-gray-800 font-sans flex flex-col relative overflow-hidden">
-      {/* Decorative background elements */}
-      <div className="absolute top-0 right-0 w-96 h-96 bg-green-50 rounded-full blur-3xl -z-10 opacity-60"></div>
-      <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-50 rounded-full blur-3xl -z-10 opacity-60"></div>
-      
-      <header className="bg-white/80 backdrop-blur-md border-b border-gray-100 sticky top-0 z-50 shadow-sm">
+    <div className="min-h-screen bg-mesh text-gray-800 font-sans flex flex-col relative overflow-hidden selection:bg-indigo-100 selection:text-indigo-900">
+      <header className="glass sticky top-0 z-[100] transition-all duration-300">
         <div className="container mx-auto px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-4 cursor-pointer group" onClick={handleStartOver}>
-                <div className="w-12 h-12 bg-green-600 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-green-200 transition-transform group-hover:scale-110">
+                <div className="w-12 h-12 bg-green-600 rounded-2xl flex items-center justify-center text-white text-2xl shadow-xl shadow-green-100 transition-all group-hover:rotate-6 group-hover:scale-110">
                     <i className="fa-solid fa-leaf"></i>
                 </div>
                 <div>
-                    <h1 className="text-2xl font-black text-gray-900 tracking-tight leading-none bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-green-700">GreenBiz <span className="text-green-600 font-medium font-sans">Toolkit</span></h1>
-                    <p className="text-[10px] text-gray-400 mt-1 uppercase tracking-widest font-black opacity-80">{language === 'en' ? 'Bangladeshi SME Assessment' : 'বাংলাদেশি এসএমই মূল্যায়ন'}</p>
+                    <h1 className="text-2xl font-display font-black text-gray-900 tracking-tight leading-none">GreenSME<span className="text-green-600">.bd</span></h1>
+                    <p className="text-[10px] text-gray-400 mt-1.5 uppercase tracking-[0.2em] font-black opacity-80">{language === 'en' ? 'Sustainability Intelligence' : 'বাংলাদেশি এসএমই মূল্যায়ন'}</p>
                 </div>
             </div>
             
