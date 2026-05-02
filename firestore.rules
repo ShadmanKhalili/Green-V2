@@ -51,12 +51,15 @@ service cloud.firestore {
 
     function isValidAssessment(data) {
       return data.keys().hasAll(['enumeratorId', 'createdAt', 'totalScore', 'scores', 'probingAnswers']) &&
-        data.size() >= 5 && data.size() <= 6 &&
+        data.size() >= 5 && data.size() <= 9 &&
         data.enumeratorId is string && data.enumeratorId == request.auth.uid &&
         data.totalScore is number &&
         data.scores is map &&
         data.probingAnswers is map &&
         (data.keys().hasAll(['businessInfo']) ? (data.businessInfo is map) : true) &&
+        (data.keys().hasAll(['metadata']) ? (data.metadata is map) : true) &&
+        (data.keys().hasAll(['evidenceImages']) ? (data.evidenceImages is list && data.evidenceImages.size() <= 10) : true) &&
+        (data.keys().hasAll(['signature']) ? (data.signature is string || data.signature == null) : true) &&
         isValidTimestamp(data.createdAt);
     }
 

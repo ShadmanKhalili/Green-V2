@@ -53,6 +53,19 @@
         "createdAt": {
           "type": "string",
           "format": "date-time"
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Information about the device and timing."
+        },
+        "evidenceImages": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of base64 images."
+        },
+        "signature": {
+          "type": "string",
+          "description": "A base64 signature image."
         }
       },
       "required": ["enumeratorId", "createdAt", "totalScore", "scores", "probingAnswers"]
