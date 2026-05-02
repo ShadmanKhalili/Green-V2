@@ -1460,6 +1460,161 @@ const Footer: React.FC<{ language: Language }> = ({ language }) => (
   </footer>
 );
 
+const AuthScreen: React.FC<{ language: Language; onGuest: () => void }> = ({ language, onGuest }) => {
+    const { signInWithGoogle, signInWithEmail, registerWithEmail, resetPassword } = useAuth();
+    const [isRegistering, setIsRegistering] = useState(false);
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [name, setName] = useState('');
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [showReset, setShowReset] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+        try {
+            if (showReset) {
+                await resetPassword(email);
+                alert(language === 'en' ? 'Password reset email sent!' : 'পাসওয়ার্ড রিসেট ইমেল পাঠানো হয়েছে!');
+                setShowReset(false);
+            } else if (isRegistering) {
+                if (!name) throw new Error(language === 'en' ? 'Name is required' : 'নাম আবশ্যক');
+                await registerWithEmail(email, password, name);
+            } else {
+                await signInWithEmail(email, password);
+            }
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center justify-center py-12 px-6 sm:px-12 bg-white rounded-3xl shadow-2xl mt-8 max-w-2xl mx-auto border border-green-50"
+        >
+            <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center text-green-600 text-3xl mb-6 shadow-inner rotate-3">
+                <i className="fa-solid fa-leaf"></i>
+            </div>
+            <h2 className="text-3xl font-black mb-2 text-green-900 text-center tracking-tight">{language === 'en' ? 'GreenSME.bd' : 'গ্রিনএসএমই.বিডি'}</h2>
+            <p className="text-gray-500 mb-8 max-w-lg text-center text-sm font-medium">
+                {language === 'en' 
+                    ? 'Sustainability Intelligence Platform for Bangladeshi SMEs' 
+                    : 'বাংলাদেশি ক্ষুদ্র ও মাঝারি উদ্যোক্তাদের জন্য টেকসই বুদ্ধিমত্তা প্ল্যাটফর্ম'}
+            </p>
+
+            <div className="w-full max-w-sm space-y-6">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    {!showReset && isRegistering && (
+                        <div>
+                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">{language === 'en' ? 'Full Name' : 'পুরো নাম'}</label>
+                            <input 
+                                type="text" 
+                                required
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-4 focus:ring-green-100 focus:border-green-500 outline-none transition-all font-medium"
+                                placeholder={language === 'en' ? 'John Doe' : 'জন ডো'}
+                            />
+                        </div>
+                    )}
+                    <div>
+                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">{language === 'en' ? 'Email Address' : 'ইমেল ঠিকানা'}</label>
+                        <input 
+                            type="email" 
+                            required
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-4 focus:ring-green-100 focus:border-green-500 outline-none transition-all font-medium"
+                            placeholder="email@example.com"
+                        />
+                    </div>
+                    {!showReset && (
+                        <div>
+                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">{language === 'en' ? 'Password' : 'পাসওয়ার্ড'}</label>
+                            <input 
+                                type="password" 
+                                required
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-4 focus:ring-green-100 focus:border-green-500 outline-none transition-all font-medium"
+                                placeholder="••••••••"
+                            />
+                        </div>
+                    )}
+                    
+                    {error && <p className="text-red-500 text-xs font-bold bg-red-50 p-3 rounded-lg border border-red-100">{error}</p>}
+                    
+                    <button 
+                        type="submit" 
+                        disabled={loading}
+                        className="w-full py-4 bg-green-600 text-white font-bold rounded-xl shadow-lg hover:bg-green-700 hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                    >
+                        {loading ? <i className="fa-solid fa-spinner animate-spin"></i> : (
+                            showReset 
+                                ? (language === 'en' ? 'Reset Password' : 'পাসওয়ার্ড রিসেট করুন')
+                                : (isRegistering 
+                                    ? (language === 'en' ? 'Create Account' : 'অ্যাকাউন্ট তৈরি করুন') 
+                                    : (language === 'en' ? 'Sign In' : 'সাইন ইন'))
+                        )}
+                    </button>
+                </form>
+
+                <div className="flex items-center justify-between px-2">
+                    {!showReset && (
+                        <button 
+                            onClick={() => setIsRegistering(!isRegistering)}
+                            className="text-xs font-bold text-green-600 hover:text-green-800 transition-colors uppercase tracking-wider"
+                        >
+                            {isRegistering 
+                                ? (language === 'en' ? 'Already have an account? Sign In' : 'ইতিমধ্যে একটি অ্যাকাউন্ট আছে? সাইন ইন করুন') 
+                                : (language === 'en' ? 'Need an account? Register' : 'অ্যাকাউন্ট নেই? নিবন্ধন করুন')}
+                        </button>
+                    )}
+                    {!isRegistering && (
+                        <button 
+                            onClick={() => setShowReset(!showReset)}
+                            className="text-xs font-bold text-gray-400 hover:text-gray-600 transition-colors uppercase tracking-wider"
+                        >
+                            {showReset 
+                                ? (language === 'en' ? 'Back to Login' : 'লগইনে ফিরে যান') 
+                                : (language === 'en' ? 'Forgot Password?' : 'পাসওয়ার্ড ভুলে গেছেন?')}
+                        </button>
+                    )}
+                </div>
+
+                <div className="relative flex py-4 items-center">
+                    <div className="flex-grow border-t border-gray-100"></div>
+                    <span className="flex-shrink-0 mx-4 text-gray-300 text-[10px] font-black uppercase tracking-widest italic">{language === 'en' ? 'OR' : 'অথবা'}</span>
+                    <div className="flex-grow border-t border-gray-100"></div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <button onClick={signInWithGoogle} className="py-3 bg-white text-gray-700 border border-gray-200 font-bold rounded-xl shadow-sm hover:bg-gray-50 flex items-center justify-center gap-2 text-sm transition-all">
+                        <i className="fa-brands fa-google text-red-500"></i>
+                        Google
+                    </button>
+                    <button onClick={onGuest} className="py-3 bg-white text-gray-700 border border-gray-200 font-bold rounded-xl shadow-sm hover:bg-gray-50 flex items-center justify-center gap-2 text-sm transition-all">
+                        <i className="fa-solid fa-user-secret text-indigo-500"></i>
+                        {language === 'en' ? 'Guest' : 'অতিথি'}
+                    </button>
+                </div>
+            </div>
+            
+            <p className="mt-10 text-[10px] text-gray-400 text-center font-bold uppercase tracking-[0.2em] opacity-50 px-8">
+               {language === 'en' 
+                ? 'Empowering SMEs with data-driven sustainability' 
+                : 'ডেটা-চালিত স্থায়িত্ব নিয়ে এসএমই-কে শক্তিশালী করা'}
+            </p>
+        </motion.div>
+    );
+};
+
 // --- Main App Component ---
 export default function App() {
   const [language, setLanguage] = useState<Language>(() => {
@@ -1595,41 +1750,7 @@ export default function App() {
 
   const renderContent = () => {
     if (!currentUser && !isGuest) {
-      return (
-        <motion.div 
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex flex-col items-center justify-center py-20 px-8 bg-white rounded-3xl shadow-xl mt-8 max-w-2xl mx-auto border border-green-50"
-        >
-          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center text-green-600 text-4xl mb-6 shadow-inner">
-             <i className="fa-solid fa-leaf"></i>
-          </div>
-          <h2 className="text-4xl font-extrabold mb-4 text-green-900 text-center tracking-tight">{language === 'en' ? 'Green Business Assessment' : 'সবুজ ব্যবসায়িক মূল্যায়ন'}</h2>
-          <p className="text-gray-600 mb-10 max-w-lg text-center text-lg leading-relaxed">
-            {language === 'en' 
-              ? 'Evaluate your business sustainability and get AI-powered recommendations to improve your green practices.' 
-              : 'আপনার ব্যবসার স্থায়িত্ব মূল্যায়ন করুন এবং আপনার সবুজ অনুশীলন উন্নত করতে এআই-চালিত সুপারিশ পান।'}
-          </p>
-          <div className="flex flex-col w-full gap-4 max-w-sm">
-              <button onClick={signInWithGoogle} className="w-full py-4 bg-green-600 text-white font-bold rounded-xl shadow-lg hover:bg-green-700 hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center gap-3 text-lg">
-                <i className="fa-brands fa-google"></i>
-                {language === 'en' ? 'Sign in with Google' : 'Google দিয়ে সাইন ইন করুন'}
-              </button>
-              <div className="relative flex py-2 items-center">
-                  <div className="flex-grow border-t border-gray-200"></div>
-                  <span className="flex-shrink-0 mx-4 text-gray-400 text-sm">or</span>
-                  <div className="flex-grow border-t border-gray-200"></div>
-              </div>
-              <button onClick={() => setIsGuest(true)} className="w-full py-4 bg-white text-gray-700 border-2 border-gray-200 font-bold rounded-xl shadow-sm hover:bg-gray-50 hover:border-green-300 transition-all flex items-center justify-center gap-3 text-lg">
-                <i className="fa-solid fa-user-secret"></i>
-                {language === 'en' ? 'Continue as Guest' : 'অতিথি হিসাবে চালিয়ে যান'}
-              </button>
-          </div>
-          <p className="mt-6 text-sm text-gray-400 text-center">
-             {language === 'en' ? 'Guests receive a basic score but AI recommendations require login.' : 'অতিথিরা বেসিক স্কোর পাবেন তবে এআই সুপারিশের জন্য লগইন প্রয়োজন।'}
-          </p>
-        </motion.div>
-      );
+      return <AuthScreen language={language} onGuest={() => setIsGuest(true)} />;
     }
 
     if (userProfile?.role === 'admin' && view === 'admin') {
