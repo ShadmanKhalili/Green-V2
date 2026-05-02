@@ -64,7 +64,7 @@ export interface ProbingQuestion {
     backendTag: string;
     type: 'text' | 'select' | 'checkbox' | 'location' | 'photo' | 'signature';
     text: LocalizedString;
-    options?: ProbingQuestionOption[];
+    options?: ProbingQuestionOption[] | ((answers: ProbingAnswers) => ProbingQuestionOption[]);
     dependsOn?: (answers: ProbingAnswers) => boolean;
 }
 

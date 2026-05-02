@@ -85,13 +85,121 @@ export const PROBING_QUESTIONS: ProbingQuestion[] = [
         { value: 'Other service business', text: { en: 'Other service business', bn: 'অন্যান্য পরিষেবা ব্যবসা' } },
         { value: 'Other', text: { en: 'Other', bn: 'অন্যান্য' } }
     ]},
-    { id: 'P9', backendTag: 'sub_sector_activity', type: 'select', text: { en: 'What is your main business activity?', bn: 'আপনার প্রধান ব্যবসায়িক কার্যকলাপ কি?' }, dependsOn: (a) => a['P8'] !== undefined && a['P8'] !== 'default', options: [
-        { value: 'default', text: { en: 'Select based on your sector above...', bn: 'উপরের আপনার খাতের উপর ভিত্তি করে নির্বাচন করুন...' } },
-        { value: 'Agriculture', text: { en: 'Rice/Vegetable/Crop Farming', bn: 'ধান/সবজি/ফসল চাষ' } },
-        { value: 'Livestock', text: { en: 'Dairy/Poultry/Fish Farming', bn: 'ডেইরি/পোল্ট্রি/মাছ চাষ' } },
-        { value: 'Manufacturing', text: { en: 'Food Processing/Manufacturing', bn: 'খাদ্য প্রক্রিয়াকরণ/উৎপাদন' } },
-        { value: 'Retail', text: { en: 'Retail/Grocery/Pharmacy', bn: 'খুচরা/মুদি/ফার্মেসি' } }
-    ]},
+    { id: 'P9', backendTag: 'sub_sector_activity', type: 'select', text: { en: 'What is your main business activity?', bn: 'আপনার প্রধান ব্যবসায়িক কার্যকলাপ কি?' }, dependsOn: (a) => a['P8'] !== undefined && a['P8'] !== 'default', options: (a) => {
+        const p8 = a['P8'] as string;
+        let opts = [{ value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } }];
+        
+        switch (p8) {
+            case 'Agriculture / crop production / nursery':
+                opts.push(
+                    { value: 'Rice farming', text: { en: 'Rice farming', bn: 'ধান চাষ' } },
+                    { value: 'Vegetable farming', text: { en: 'Vegetable farming', bn: 'সবজি চাষ' } },
+                    { value: 'Fruit farming', text: { en: 'Fruit farming', bn: 'ফল চাষ' } },
+                    { value: 'Flower or nursery business', text: { en: 'Flower or nursery business', bn: 'ফুল বা নার্সারি ব্যবসা' } },
+                    { value: 'Seedling production', text: { en: 'Seedling production', bn: 'চারা উৎপাদন' } },
+                    { value: 'Mixed crop farming', text: { en: 'Mixed crop farming', bn: 'মিশ্র ফসল চাষ' } },
+                    { value: 'Other crop/agriculture activity', text: { en: 'Other crop/agriculture activity', bn: 'অন্যান্য ফসল/কৃষি কাজ' } }
+                );
+                break;
+            case 'Livestock / dairy / poultry / fisheries':
+                opts.push(
+                    { value: 'Dairy farm', text: { en: 'Dairy farm', bn: 'ডেইরি খামার' } },
+                    { value: 'Cattle fattening', text: { en: 'Cattle fattening', bn: 'গবাদি পশু মোটাতাজাকরণ' } },
+                    { value: 'Goat/sheep rearing', text: { en: 'Goat/sheep rearing', bn: 'ছাগল/ভেড়া পালন' } },
+                    { value: 'Poultry farm', text: { en: 'Poultry farm', bn: 'পোল্ট্রি খামার' } },
+                    { value: 'Duck farm', text: { en: 'Duck farm', bn: 'হাঁসের খামার' } },
+                    { value: 'Fish farming / aquaculture', text: { en: 'Fish farming / aquaculture', bn: 'মাছ চাষ / জলজ চাষ' } },
+                    { value: 'Hatchery', text: { en: 'Hatchery', bn: 'হ্যাচারি' } },
+                    { value: 'Mixed livestock/fisheries', text: { en: 'Mixed livestock/fisheries', bn: 'মিশ্র গবাদি পশু/মৎস্য' } },
+                    { value: 'Other', text: { en: 'Other', bn: 'অন্যান্য' } }
+                );
+                break;
+            case 'Manufacturing or processing':
+                opts.push(
+                    { value: 'Rice mill / husking', text: { en: 'Rice mill / husking', bn: 'চালের কল / হাস্কিং' } },
+                    { value: 'Food processing', text: { en: 'Food processing', bn: 'খাদ্য প্রক্রিয়াকরণ' } },
+                    { value: 'Bakery / snacks / sweets production', text: { en: 'Bakery / snacks / sweets production', bn: 'বেকারি / স্ন্যাকস / মিষ্টি উৎপাদন' } },
+                    { value: 'Spice grinding / oil processing', text: { en: 'Spice grinding / oil processing', bn: 'মসলা গুঁড়া করা / তেল প্রক্রিয়াকরণ' } },
+                    { value: 'Furniture / wood products', text: { en: 'Furniture / wood products', bn: 'আসবাবপত্র / কাঠের পণ্য' } },
+                    { value: 'Brick/block/construction material', text: { en: 'Brick/block/construction material', bn: 'ইট/ব্লক/নির্মাণ সামগ্রী' } },
+                    { value: 'Small chemical or detergent production', text: { en: 'Small chemical or detergent production', bn: 'ছোট রাসায়নিক বা ডিটারজেন্ট উৎপাদন' } },
+                    { value: 'Other manufacturing', text: { en: 'Other manufacturing', bn: 'অন্যান্য উৎপাদন' } }
+                );
+                break;
+            case 'Retail or wholesale trading':
+                opts.push(
+                    { value: 'Grocery shop', text: { en: 'Grocery shop', bn: 'মুদি দোকান' } },
+                    { value: 'Pharmacy', text: { en: 'Pharmacy', bn: 'ফার্মেসি' } },
+                    { value: 'Clothing shop', text: { en: 'Clothing shop', bn: 'কাপড়ের দোকান' } },
+                    { value: 'Hardware shop', text: { en: 'Hardware shop', bn: 'হার্ডওয়্যারের দোকান' } },
+                    { value: 'Electronics shop', text: { en: 'Electronics shop', bn: 'ইলেকট্রনিক্সের দোকান' } },
+                    { value: 'Agricultural input shop', text: { en: 'Agricultural input shop', bn: 'কৃষি উপকরণ দোকান' } },
+                    { value: 'Wholesale trading', text: { en: 'Wholesale trading', bn: 'পাইকারি ট্রেডিং' } },
+                    { value: 'Market stall', text: { en: 'Market stall', bn: 'বাজারের স্টল' } },
+                    { value: 'Other retail/trade', text: { en: 'Other retail/trade', bn: 'অন্যান্য খুচরা/ট্রেড' } }
+                );
+                break;
+            case 'Food service / restaurant / catering / hotel':
+                opts.push(
+                    { value: 'Tea stall / small food stall', text: { en: 'Tea stall / small food stall', bn: 'চায়ের স্টল / ছোট খাবারের স্টল' } },
+                    { value: 'Restaurant', text: { en: 'Restaurant', bn: 'রেস্টুরেন্ট' } },
+                    { value: 'Catering', text: { en: 'Catering', bn: 'ক্যাটারিং' } },
+                    { value: 'Bakery outlet', text: { en: 'Bakery outlet', bn: 'বেকারি আউটলেট' } },
+                    { value: 'Hotel / guesthouse', text: { en: 'Hotel / guesthouse', bn: 'হোটেল / গেস্টহাউস' } },
+                    { value: 'Street food business', text: { en: 'Street food business', bn: 'রাস্তার খাবারের ব্যবসা' } },
+                    { value: 'Other food service', text: { en: 'Other food service', bn: 'অন্যান্য খাদ্য পরিষেবা' } }
+                );
+                break;
+            case 'Transport / logistics / delivery / cold chain':
+                opts.push(
+                    { value: 'Goods transport', text: { en: 'Goods transport', bn: 'পণ্য পরিবহন' } },
+                    { value: 'Passenger transport', text: { en: 'Passenger transport', bn: 'যাত্রী পরিবহন' } },
+                    { value: 'Delivery service', text: { en: 'Delivery service', bn: 'ডেলিভারি পরিষেবা' } },
+                    { value: 'Cold storage / cold chain', text: { en: 'Cold storage / cold chain', bn: 'কোল্ড স্টোরেজ / কোল্ড চেইন' } },
+                    { value: 'Warehouse', text: { en: 'Warehouse', bn: 'গুদাম' } },
+                    { value: 'Courier/logistics', text: { en: 'Courier/logistics', bn: 'কুরিয়ার / লজিস্টিক্স' } },
+                    { value: 'Other', text: { en: 'Other', bn: 'অন্যান্য' } }
+                );
+                break;
+            case 'Repair, workshop, light engineering, metal work':
+                opts.push(
+                    { value: 'Welding workshop', text: { en: 'Welding workshop', bn: 'ওয়েল্ডিং ওয়ার্কশপ' } },
+                    { value: 'Vehicle repair', text: { en: 'Vehicle repair', bn: 'যানবাহন মেরামত' } },
+                    { value: 'Machinery repair', text: { en: 'Machinery repair', bn: 'যন্ত্রপাতি মেরামত' } },
+                    { value: 'Metal fabrication', text: { en: 'Metal fabrication', bn: 'ধাতু ফ্যাব্রিকেশন' } },
+                    { value: 'Electrical/electronics repair', text: { en: 'Electrical/electronics repair', bn: 'বৈদ্যুতিক/ইলেকট্রনিক্স মেরামত' } },
+                    { value: 'Bicycle/rickshaw/three-wheeler repair', text: { en: 'Bicycle/rickshaw/three-wheeler repair', bn: 'সাইকেল/রিকশা/থ্রি-হুইলার মেরামত' } },
+                    { value: 'Other workshop', text: { en: 'Other workshop', bn: 'অন্যান্য ওয়ার্কশপ' } }
+                );
+                break;
+            case 'Textile, garments, tailoring, dyeing, washing':
+                opts.push(
+                    { value: 'Tailoring', text: { en: 'Tailoring', bn: 'টেইলরিং' } },
+                    { value: 'Small garment production', text: { en: 'Small garment production', bn: 'ছোট পোশাক উৎপাদন' } },
+                    { value: 'Embroidery', text: { en: 'Embroidery', bn: 'এমব্রয়ডারি' } },
+                    { value: 'Dyeing', text: { en: 'Dyeing', bn: 'ডাইং' } },
+                    { value: 'Washing', text: { en: 'Washing', bn: 'ওয়াশিং' } },
+                    { value: 'Printing', text: { en: 'Printing', bn: 'প্রিন্টিং' } },
+                    { value: 'Textile waste/recycling', text: { en: 'Textile waste/recycling', bn: 'টেক্সটাইল বর্জ্য/রিসাইক্লিং' } },
+                    { value: 'Other textile activity', text: { en: 'Other textile activity', bn: 'অন্যান্য টেক্সটাইল কাজ' } }
+                );
+                break;
+            case 'Plastic, packaging, printing, recycling':
+                opts.push(
+                    { value: 'Plastic product manufacturing', text: { en: 'Plastic product manufacturing', bn: 'প্লাস্টিক পণ্য উৎপাদন' } },
+                    { value: 'Packaging production', text: { en: 'Packaging production', bn: 'প্যাকেজিং উৎপাদন' } },
+                    { value: 'Printing press', text: { en: 'Printing press', bn: 'প্রিন্টিং প্রেস' } },
+                    { value: 'Recycling / waste collection', text: { en: 'Recycling / waste collection', bn: 'রিসাইক্লিং / বর্জ্য সংগ্রহ' } },
+                    { value: 'Paper/cardboard packaging', text: { en: 'Paper/cardboard packaging', bn: 'কাগজ/কার্ডবোর্ড প্যাকেজিং' } },
+                    { value: 'Other', text: { en: 'Other', bn: 'অন্যান্য' } }
+                );
+                break;
+            default:
+                opts.push({ value: 'Other', text: { en: 'Other', bn: 'অন্যান্য' } });
+                break;
+        }
+        return opts;
+    }},
     { id: 'P10', backendTag: 'mixed_business_model', type: 'select', text: { en: 'Does your business do more than one type of activity?', bn: 'আপনার ব্যবসা কি একাধিক ধরনের কাজ করে?' }, dependsOn: (a) => a['P8'] !== undefined && a['P8'] !== 'default', options: [
         { value: 'default', text: { en: 'Select an option...', bn: 'একটি বিকল্প নির্বাচন করুন...' } },
         { value: 'No, only one main activity', text: { en: 'No, only one main activity', bn: 'না, কেবল একটি প্রধান কাজ' } },

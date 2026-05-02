@@ -144,13 +144,15 @@ const generateCustomAssessmentData = (answers: ProbingAnswers) => {
 
 // --- UI Components ---
 
-const ProbingQuestionComponent: React.FC<{ index: number; question: ProbingQuestion; value: string | string[]; onChange: (id: string, value: any) => void; language: Language; isRequired: boolean; }> = ({ index, question, value, onChange, language, isRequired }) => {
+const ProbingQuestionComponent: React.FC<{ index: number; question: ProbingQuestion; value: string | string[]; onChange: (id: string, value: any) => void; language: Language; isRequired: boolean; answers: ProbingAnswers }> = ({ index, question, value, onChange, language, isRequired, answers }) => {
     let isAnswered = false;
     if (question.type === 'checkbox') {
         isAnswered = Array.isArray(value) && value.length > 0;
     } else {
         isAnswered = typeof value === 'string' && value !== 'default' && value.trim() !== '';
     }
+
+    const options = typeof question.options === 'function' ? question.options(answers) : question.options;
 
     return (
         <div className={`mb-3 sm:mb-6 p-3 sm:p-5 rounded-xl border-l-4 transition-all duration-300 shadow-sm ${
@@ -181,7 +183,7 @@ const ProbingQuestionComponent: React.FC<{ index: number; question: ProbingQuest
                         placeholder={language === 'en' ? 'Type your answer here...' : 'আপনার উত্তর এখানে লিখুন...'}
                     />
                 )}
-                {question.type === 'select' && question.options && (
+                {question.type === 'select' && options && (
                     <select 
                         value={value as string || 'default'} 
                         onChange={e => onChange(question.id, e.target.value)}
@@ -189,7 +191,7 @@ const ProbingQuestionComponent: React.FC<{ index: number; question: ProbingQuest
                             isAnswered ? 'border-green-300 bg-white' : 'border-gray-300'
                         }`}
                     >
-                        {question.options.map(opt => <option key={opt.value} value={opt.value}>{opt.text[language]}</option>)}
+                        {options.map(opt => <option key={opt.value} value={opt.value}>{opt.text[language]}</option>)}
                     </select>
                 )}
                 {question.type === 'location' && (
@@ -199,9 +201,9 @@ const ProbingQuestionComponent: React.FC<{ index: number; question: ProbingQuest
                         language={language}
                     />
                 )}
-                {question.type === 'checkbox' && question.options && (
+                {question.type === 'checkbox' && options && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {question.options.map(opt => {
+                        {options.map(opt => {
                             const isChecked = (value as string[]).includes(opt.value);
                             return (
                                 <label key={opt.value} className={`flex items-start p-3 border rounded-lg cursor-pointer transition-colors ${
@@ -298,15 +300,17 @@ const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => 
                  }
              }
              if (q.type === 'select' && q.options) {
-                 const validOptions = q.options.filter(o => o.value !== 'default');
+                 const options = typeof q.options === 'function' ? q.options(dummyAnswers) : q.options;
+                 const validOptions = options.filter(o => o.value !== 'default');
                  if (validOptions.length > 0) {
                      const randomIndex = Math.floor(Math.random() * validOptions.length);
                      dummyAnswers[q.id] = validOptions[randomIndex].value;
                  }
              }
              if (q.type === 'checkbox' && q.options) {
-                 const count = Math.floor(Math.random() * q.options.length) + 1;
-                 const shuffled = [...q.options].sort(() => 0.5 - Math.random());
+                 const options = typeof q.options === 'function' ? q.options(dummyAnswers) : q.options;
+                 const count = Math.floor(Math.random() * options.length) + 1;
+                 const shuffled = [...options].sort(() => 0.5 - Math.random());
                  dummyAnswers[q.id] = shuffled.slice(0, count).map(o => o.value);
              }
         });
@@ -403,7 +407,7 @@ const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => 
                         const isRequired = ['select', 'text', 'location'].includes(q.type);
                         const displayIndex = currentPage === 1 ? index + 1 : visibleQuestionsPage1.length + index + 1;
                         return (
-                            <ProbingQuestionComponent key={q.id} index={displayIndex} question={q} value={answers[q.id] || (q.type === 'checkbox' ? [] : (q.type === 'select' ? 'default' : ''))} onChange={handleAnswerChange} language={language} isRequired={isRequired} />
+                            <ProbingQuestionComponent key={q.id} index={displayIndex} question={q} value={answers[q.id] || (q.type === 'checkbox' ? [] : (q.type === 'select' ? 'default' : ''))} onChange={handleAnswerChange} language={language} isRequired={isRequired} answers={answers} />
                         )
                     })}
                 </div>
