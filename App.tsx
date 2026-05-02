@@ -7,8 +7,7 @@ import { SCORING_OPTIONS, PROBING_QUESTIONS, SCORE_INTERPRETATIONS, SECTOR_BENCH
 import { GoogleGenAI } from "@google/genai";
 import { useAuth } from './AuthContext';
 const AdminDashboard = React.lazy(() => import('./src/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
-const SustainabilityAssistant = React.lazy(() => import('./src/components/SustainabilityAssistant').then(m => ({ default: m.SustainabilityAssistant })));
-import { getQuestionHelp } from './src/services/geminiService';
+import { checkAnswersCoherence } from './src/services/geminiService';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import { motion, AnimatePresence } from 'motion/react';
@@ -61,33 +60,21 @@ const getWeightNumber = (priority: WeightPriority): number => {
     }
 };
 
-const AIHelpButton: React.FC<{ questionText: string, language: Language }> = ({ questionText, language }) => {
-    const [helpText, setHelpText] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
+const HelpTooltip: React.FC<{ evidenceExamples?: {en: string, bn: string}, language: Language }> = ({ evidenceExamples, language }) => {
     const [showPopover, setShowPopover] = useState(false);
 
-    const handleGetHelp = async () => {
-        if (helpText) {
-            setShowPopover(!showPopover);
-            return;
-        }
-        setLoading(true);
-        setShowPopover(true);
-        const text = await getQuestionHelp(questionText, language);
-        setHelpText(text);
-        setLoading(false);
-    };
+    if (!evidenceExamples) return null;
 
     return (
         <div className="relative inline-block ml-2">
             <button 
-                onClick={handleGetHelp}
+                onClick={() => setShowPopover(!showPopover)}
                 className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
                     showPopover ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-400 hover:bg-indigo-100 hover:text-indigo-600'
                 }`}
-                title="AI Support"
+                title={language === 'en' ? 'Help' : 'সাহায্য'}
             >
-                <i className={`fa-solid ${loading ? 'fa-circle-notch animate-spin' : 'fa-brain'} text-[10px]`}></i>
+                <i className="fa-solid fa-circle-info text-[12px]"></i>
             </button>
             <AnimatePresence>
                 {showPopover && (
@@ -95,21 +82,14 @@ const AIHelpButton: React.FC<{ questionText: string, language: Language }> = ({ 
                         initial={{ opacity: 0, scale: 0.9, y: 10 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                        className="absolute left-0 bottom-full mb-3 w-64 p-4 bg-gray-900 text-white rounded-2xl shadow-2xl z-50 text-xs leading-relaxed border border-white/10"
+                        className="absolute left-0 bottom-full mb-3 w-64 p-4 bg-gray-900 text-white rounded-2xl shadow-2xl z-50 text-xs leading-relaxed border border-white/10 font-normal"
                     >
                         <div className="flex items-center gap-2 mb-2 text-indigo-300 font-black uppercase tracking-widest text-[9px]">
-                            <i className="fa-solid fa-wand-magic-sparkles"></i>
-                            AI Insight
+                            <i className="fa-solid fa-lightbulb"></i>
+                            {language === 'en' ? 'Examples' : 'উদাহরণ'}
                         </div>
-                        {loading ? (
-                            <div className="flex gap-1 py-1">
-                                <div className="w-1 h-1 bg-white/30 rounded-full animate-bounce"></div>
-                                <div className="w-1 h-1 bg-white/30 rounded-full animate-bounce [animation-delay:0.2s]"></div>
-                                <div className="w-1 h-1 bg-white/30 rounded-full animate-bounce [animation-delay:0.4s]"></div>
-                            </div>
-                        ) : (
-                            <p>{helpText}</p>
-                        )}
+                        <p>{evidenceExamples[language]}</p>
+                        
                         <div className="absolute -bottom-1.5 left-2.5 w-3 h-3 bg-gray-900 rotate-45 border-r border-b border-white/10"></div>
                         <button onClick={() => setShowPopover(false)} className="absolute top-2 right-2 text-white/30 hover:text-white">
                             <i className="fa-solid fa-xmark text-[10px]"></i>
@@ -273,6 +253,10 @@ const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => 
         if (saved) return parseInt(saved, 10);
         return 1;
     });
+    
+    const [isCheckingCoherence, setIsCheckingCoherence] = useState(false);
+    const [coherenceFeedback, setCoherenceFeedback] = useState<string | null>(null);
+    const [showCoherenceModal, setShowCoherenceModal] = useState(false);
 
     useEffect(() => {
         localStorage.setItem('sme_probing_draft', JSON.stringify(answers));
@@ -284,6 +268,19 @@ const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => 
 
     const handleAnswerChange = (id: string, value: any) => {
         setAnswers(prev => ({ ...prev, [id]: value }));
+    };
+
+    const handleGenerateAssessment = async () => {
+        setIsCheckingCoherence(true);
+        const { hasInconsistency, feedback } = await checkAnswersCoherence(answers, PROBING_QUESTIONS, language);
+        setIsCheckingCoherence(false);
+
+        if (hasInconsistency && feedback) {
+            setCoherenceFeedback(feedback);
+            setShowCoherenceModal(true);
+        } else {
+            onComplete(answers);
+        }
     };
 
     const handleAutoFill = () => {
@@ -318,8 +315,8 @@ const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => 
         setCurrentPage(2);
     };
 
-    const questionsPage1 = useMemo(() => PROBING_QUESTIONS.slice(0, 7), []);
-    const questionsPage2 = useMemo(() => PROBING_QUESTIONS.slice(7), []);
+    const questionsPage1 = useMemo(() => PROBING_QUESTIONS.slice(0, 10), []);
+    const questionsPage2 = useMemo(() => PROBING_QUESTIONS.slice(10), []);
 
     const visibleQuestionsPage1 = useMemo(() => {
         return questionsPage1.filter(q => {
@@ -452,15 +449,20 @@ const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => 
                         </button>
                     ) : (
                         <button 
-                            onClick={() => onComplete(answers)}
-                            disabled={!isCurrentPageComplete}
+                            onClick={handleGenerateAssessment}
+                            disabled={!isCurrentPageComplete || isCheckingCoherence}
                             className={`flex-grow py-4 px-6 font-bold text-xl rounded-xl shadow-md transition-all duration-300 flex items-center justify-center gap-3 ${
-                                isCurrentPageComplete 
+                                isCurrentPageComplete && !isCheckingCoherence
                                     ? 'bg-green-600 text-white hover:bg-green-700 hover:shadow-lg transform hover:-translate-y-1' 
                                     : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                             }`}
                         >
-                            {isCurrentPageComplete ? (
+                            {isCheckingCoherence ? (
+                                <>
+                                    <i className="fa-solid fa-circle-notch fa-spin"></i>
+                                    <span>{language === 'en' ? 'Checking answers...' : 'উত্তর যাচাই করা হচ্ছে...'}</span>
+                                </>
+                            ) : isCurrentPageComplete ? (
                                 <>
                                     <span>{language === 'en' ? 'Generate My Assessment' : 'আমার মূল্যায়ন তৈরি করুন'}</span>
                                     <i className="fa-solid fa-check"></i>
@@ -478,6 +480,51 @@ const ProbingQuestionsForm: React.FC<{ onComplete: (answers: ProbingAnswers) => 
                     )}
                 </div>
             </div>
+            
+            <AnimatePresence>
+                {showCoherenceModal && (
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm"
+                    >
+                        <motion.div 
+                            initial={{ scale: 0.95, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.95, y: 20 }}
+                            className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 sm:p-8"
+                        >
+                            <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center text-amber-600 text-2xl mb-4">
+                                <i className="fa-solid fa-lightbulb"></i>
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-900 mb-2">
+                                {language === 'en' ? 'Quick Check Before We Continue' : 'অবিরত করার আগে দ্রুত চেক করুন'}
+                            </h3>
+                            <p className="text-gray-600 mb-6 leading-relaxed">
+                                {coherenceFeedback}
+                            </p>
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <button 
+                                    onClick={() => setShowCoherenceModal(false)}
+                                    className="flex-1 py-3 px-4 bg-white border border-gray-300 text-gray-700 font-bold rounded-xl hover:bg-gray-50 transition-colors"
+                                >
+                                    {language === 'en' ? 'Review Answers' : 'উত্তর পর্যালোচনা করুন'}
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        setShowCoherenceModal(false);
+                                        onComplete(answers);
+                                    }}
+                                    className="flex-1 py-3 px-4 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition-colors"
+                                >
+                                    {language === 'en' ? 'Continue Anyway' : 'যাইহোক চালিয়ে যান'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </motion.div>
     );
 };
@@ -507,7 +554,7 @@ const QuestionRow: React.FC<{
                     <label className="font-bold text-gray-900 text-base sm:text-lg cursor-pointer leading-tight block mb-1">
                         {question.text[language]}
                         <span className="text-red-500 ml-1 align-top text-lg sm:text-xl" title={language === 'en' ? 'Required' : 'আবশ্যক'}>*</span>
-                        <AIHelpButton questionText={question.text[language]} language={language} />
+                        <HelpTooltip evidenceExamples={question.evidenceExamples} language={language} />
                     </label>
                     <p className="text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
                         <i className="fa-solid fa-shield-halved text-indigo-300"></i>
@@ -1891,9 +1938,6 @@ export default function App() {
       </main>
 
       <Footer language={language} />
-      <React.Suspense fallback={null}>
-        <SustainabilityAssistant />
-      </React.Suspense>
     </div>
   );
 }

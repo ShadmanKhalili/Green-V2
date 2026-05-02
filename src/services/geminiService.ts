@@ -69,25 +69,39 @@ export async function generateNarrativeInsights(dataSummary: string) {
   }
 }
 
-export async function getQuestionHelp(questionText: string, language: 'en' | 'bn') {
+export async function checkAnswersCoherence(answers: Record<string, any>, questionsObj: any, language: 'en' | 'bn') {
     try {
         const response = await ai.models.generateContent({
             model: "gemini-3-flash-preview",
-            contents: `Explain the importance of this sustainability question and suggest what evidence a business might need to answer it correctly.
+            contents: `Please review the following set of answers provided by a small business. Check if there are any obvious logical inconsistencies based on their business type and activities. For example, if a livestock farm doesn't select animal-related waste, or if a retail shop claims to use a lot of heavy machinery.
             
-            Question: "${questionText}"
-            Language: ${language === 'en' ? 'English' : 'Bengali'}
+            Questions and their options:
+            ${JSON.stringify(questionsObj)}
             
-            Keep the explanation simple and friendly. Maximum 3 sentences.`,
+            Provided Answers:
+            ${JSON.stringify(answers)}
+            
+            If the answers are mostly coherent, return "null" as the "feedback". Only return feedback if there is a genuine inconsistency. The feedback should be friendly, polite, and explain the inconsistency simply. Do not force them to change it, just point it out as something to review. Keep it under 3 sentences.
+            
+            Determine if there is an inconsistency and provide a brief feedback string in ${language === 'en' ? 'English' : 'Bengali'}.
+            Output as JSON with keys: "hasInconsistency" (boolean) and "feedback" (string or null).`,
             config: {
-                systemInstruction: "You are a helpful sustainability consultant for Bangladeshi SMEs."
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        hasInconsistency: { type: Type.BOOLEAN },
+                        feedback: { type: Type.STRING, nullable: true }
+                    },
+                    required: ["hasInconsistency"]
+                }
             }
         });
 
-        return response.text;
+        const data = JSON.parse(response.text || '{}');
+        return data;
     } catch (error) {
-        return language === 'en' 
-            ? "I couldn't generate help for this right now, but try looking into your recent utility bills or policy documents!"
-            : "আমি এই মুহূর্তে সাহায্য করতে পারছি না, তবে আপনার ইউটিলিটি বিল বা পলিসি ডকুমেন্টগুলো চেক করে দেখতে পারেন।";
+        console.error("Coherence Check Error:", error);
+        return { hasInconsistency: false, feedback: null };
     }
 }

@@ -90,8 +90,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signInWithEmail = async (email: string, pass: string) => {
     try {
       await signInWithEmailAndPassword(auth, email, pass);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error signing in with email", error);
+      if (error.code === 'auth/operation-not-allowed') {
+        throw new Error("Email/Password Sign-In is not enabled. Please enable it in Firebase Console -> Authentication -> Sign-in method.");
+      }
       throw error;
     }
   };
@@ -100,8 +103,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       await updateProfile(userCredential.user, { displayName: name });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error registering with email", error);
+      if (error.code === 'auth/operation-not-allowed') {
+         throw new Error("Email/Password Sign-In is not enabled. Please enable it in Firebase Console -> Authentication -> Sign-in method.");
+      }
       throw error;
     }
   };
