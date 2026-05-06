@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Claude Code session state
+.claude/
+
+# Temporary agent briefs
+_AGENT_BRIEF.md
+_MODULE_SPECS.md
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -52,7 +52,7 @@ export interface SuccessStory {
     results: LocalizedString;
 }
 
-// --- New types for Probing Questions ---
+// --- Probing question types ---
 
 export interface ProbingQuestionOption {
     value: string;
@@ -74,17 +74,22 @@ export interface ProbingAnswers {
 
 export type WeightPriority = 'Very High' | 'High' | 'Medium' | 'Low' | 'Pathway';
 
+export type DomainCode = 'D1' | 'D2' | 'D3' | 'D4' | 'D5' | 'D6' | 'D7' | 'D8';
+
 export interface MainQuestion {
     id: string;
     text: LocalizedString;
-    domain: string;
+    domain: DomainCode;
     weightPriority: WeightPriority;
     evidenceExamples?: LocalizedString;
     financeLink?: LocalizedString;
     routingCondition: (answers: ProbingAnswers) => boolean;
+    /** True for "Very High" priority questions on the BWM critical-risk override list. Score 0 or 1 caps total at 40%. */
+    criticalRisk?: boolean;
 }
 
 export interface Domain {
-    code: string;
+    code: DomainCode;
     name: LocalizedString;
+    icon?: string;
 }
