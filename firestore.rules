@@ -12,11 +12,10 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid != null;
     }
 
-    // We allow development email "sadmankhalili@gmail.com" to be the bootstrapped Super Admin
+    // Bootstrapped Super Admin is "capecconsulting@gmail.com"
     function isSuperAdmin() {
       return isSignedIn() &&
-        // In real environments, `email_verified == true` should be checked!
-        request.auth.token.email == "sadmankhalili@gmail.com" &&
+        request.auth.token.email == "capecconsulting@gmail.com" &&
         request.auth.token.email_verified == true;
     }
 
@@ -95,10 +94,12 @@ service cloud.firestore {
       );
 
       allow create: if isValidId(assessmentId) && isSignedIn() && isValidAssessment(incoming());
-      
+
       // We don't allow modifying assessments once submitted for compliance. Admins also shouldn't change the raw data.
       allow update: if false;
-      allow delete: if false;
+
+      // Admins (and the super admin) may delete submissions — used by the admin panel cleanup tool.
+      allow delete: if isValidId(assessmentId) && isSignedIn() && (isSuperAdmin() || isAdmin());
     }
   }
 }
