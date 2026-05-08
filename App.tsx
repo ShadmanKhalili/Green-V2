@@ -1,13 +1,16 @@
 
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Language, Indicator, Pillar, ProbingQuestion, ProbingAnswers, Domain, MainQuestion } from './types';
+import { Language, Indicator, Pillar, ProbingQuestion, ProbingAnswers, Domain, MainQuestion, WeightPriority, DomainCode } from './types';
 import { MAIN_QUESTIONS, DOMAINS } from './questionBank';
+import { selectCuratedQuestions } from './src/questions/selector';
 import { SCORING_OPTIONS, PROBING_QUESTIONS, SCORE_INTERPRETATIONS, SECTOR_BENCHMARKS, KEY_RESOURCES } from './constants';
 import { GoogleGenAI } from "@google/genai";
 import { useAuth } from './AuthContext';
 const AdminDashboard = React.lazy(() => import('./src/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
 import { checkAnswersCoherence } from './src/services/geminiService';
+import { calculateBwmScore, BwmResult, CRITICAL_RISK_CAP } from './src/scoring/bwm';
+import { generateRecommendations, Recommendations as StructuredRecs } from './src/scoring/recommendations';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import { motion, AnimatePresence } from 'motion/react';
@@ -102,14 +105,14 @@ const HelpTooltip: React.FC<{ evidenceExamples?: {en: string, bn: string}, langu
 };
 
 const generateCustomAssessmentData = (answers: ProbingAnswers) => {
-    // Determine which questions apply based on routing conditions
-    const applicableQuestions = MAIN_QUESTIONS.filter(q => {
-        const isMatched = q.routingCondition(answers);
-        return isMatched;
-    });
-    
-    console.log(`Routing Logic: ${applicableQuestions.length}/${MAIN_QUESTIONS.length} questions matched for profile.`);
-    
+    // Pass 1: routing predicates (gate by sector / footprint / facility / etc.)
+    const routedQuestions = MAIN_QUESTIONS.filter(q => q.routingCondition(answers));
+
+    // Pass 2: curated bucket quotas (spec target ~20–30 questions)
+    const applicableQuestions = selectCuratedQuestions(routedQuestions);
+
+    console.log(`Routing: ${routedQuestions.length}/${MAIN_QUESTIONS.length} matched → ${applicableQuestions.length} after curated quota selection.`);
+
     // Group by Domain
     const groupedByDomain: { domain: Domain; questions: MainQuestion[] }[] = [];
     DOMAINS.forEach(domain => {
@@ -1017,9 +1020,10 @@ const AssessmentScreen: React.FC<{
     scores: { [key: string]: number };
     onScoreChange: (id: string, score: number) => void;
     onComplete: (extraData: { images: string[], signature: string | null }) => void;
+    onStartOver: () => void;
     language: Language;
     isAdmin: boolean;
-}> = ({ assessmentData, scores, onScoreChange, onComplete, language, isAdmin }) => {
+}> = ({ assessmentData, scores, onScoreChange, onComplete, onStartOver, language, isAdmin }) => {
     const [images, setImages] = useState<string[]>([]);
     const [signature, setSignature] = useState<string | null>(null);
 
@@ -1103,8 +1107,8 @@ const AssessmentScreen: React.FC<{
                     onClick={() => onComplete({ images, signature })}
                     disabled={!isComplete}
                     className={`w-full py-4 px-6 font-bold text-xl rounded-xl shadow-md transition-all duration-300 flex items-center justify-center gap-3 ${
-                         isComplete 
-                             ? 'bg-green-600 text-white hover:bg-green-700 hover:shadow-lg transform hover:-translate-y-1' 
+                         isComplete
+                             ? 'bg-green-600 text-white hover:bg-green-700 hover:shadow-lg transform hover:-translate-y-1'
                              : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                     }`}
                 >
@@ -1115,11 +1119,24 @@ const AssessmentScreen: React.FC<{
                          </>
                     ) : (
                          <span>
-                             {language === 'en' 
-                                 ? `Please answer ${remainingCount} more required question${remainingCount !== 1 ? 's' : ''}` 
+                             {language === 'en'
+                                 ? `Please answer ${remainingCount} more required question${remainingCount !== 1 ? 's' : ''}`
                                  : `অনুগ্রহ করে আরও ${remainingCount}টি আবশ্যক প্রশ্নের উত্তর দিন`}
                          </span>
                     )}
+                </button>
+
+                <button
+                    onClick={() => {
+                        const confirmMsg = language === 'en'
+                            ? 'Discard this assessment and start a new one? All current answers will be lost.'
+                            : 'এই অ্যাসেসমেন্ট বাতিল করে নতুন একটি শুরু করবেন? বর্তমান সব উত্তর মুছে যাবে।';
+                        if (window.confirm(confirmMsg)) onStartOver();
+                    }}
+                    className="mt-4 w-full py-3 px-6 font-semibold text-base rounded-xl border border-red-200 bg-white text-red-600 hover:bg-red-50 hover:border-red-300 transition-colors flex items-center justify-center gap-2"
+                >
+                    <i className="fa-solid fa-trash-can"></i>
+                    <span>{language === 'en' ? 'Discard & Start New Assessment' : 'বাতিল করে নতুন অ্যাসেসমেন্ট শুরু করুন'}</span>
                 </button>
             </div>
         </motion.div>
@@ -1189,6 +1206,215 @@ const DetailedReportTable: React.FC<{ assessmentData: { domain: Domain; question
     );
 };
 
+// =============================================================================
+// BWM Insights — risk warning, score breakdown, structured recommendations,
+// certification readiness. Renders above the existing AI recommendations panel.
+// =============================================================================
+const BwmInsights: React.FC<{
+    bwmResult: BwmResult;
+    structuredRecs: StructuredRecs | null;
+    language: Language;
+}> = ({ bwmResult, structuredRecs, language }) => {
+    const t = (en: string, bn: string) => language === 'en' ? en : bn;
+
+    return (
+        <div className="space-y-6 mb-8">
+            {/* Risk-cap warning */}
+            {bwmResult.riskFlag && (
+                <div className="bg-red-50 border-l-4 border-red-500 rounded-2xl p-6 shadow-sm">
+                    <div className="flex items-start gap-4">
+                        <div className="bg-red-500 text-white w-10 h-10 rounded-xl flex items-center justify-center shrink-0">
+                            <i className="fa-solid fa-triangle-exclamation"></i>
+                        </div>
+                        <div className="flex-1">
+                            <h4 className="font-display font-black text-red-900 text-lg mb-1">
+                                {t('Critical environmental risk detected', 'গুরুত্বপূর্ণ পরিবেশগত ঝুঁকি শনাক্ত করা হয়েছে')}
+                            </h4>
+                            <p className="text-sm text-red-800 leading-relaxed">
+                                {t(
+                                    `Your green score is capped at ${CRITICAL_RISK_CAP}% because ${bwmResult.triggeredRiskQuestions.length} high-impact area(s) scored 0 or 1. Address these first to unlock further improvement.`,
+                                    `${bwmResult.triggeredRiskQuestions.length}টি গুরুত্বপূর্ণ বিষয়ে ০ বা ১ স্কোর পাওয়ার কারণে আপনার গ্রিন স্কোর ${CRITICAL_RISK_CAP}%-এ সীমাবদ্ধ। প্রথমে এগুলো ঠিক করুন।`
+                                )}
+                            </p>
+                            {bwmResult.triggeredRiskQuestions.length > 0 && (
+                                <div className="mt-3 text-xs font-mono text-red-600">
+                                    {t('Triggered:', 'ট্রিগার:')} {bwmResult.triggeredRiskQuestions.join(', ')}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Score breakdown */}
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+                <h4 className="font-display font-black text-gray-800 text-lg mb-4 flex items-center gap-2">
+                    <i className="fa-solid fa-chart-pie text-indigo-600"></i>
+                    {t('Score breakdown', 'স্কোর বিভাজন')}
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="bg-gray-50 rounded-xl p-3">
+                        <div className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">{t('Raw', 'কাঁচা')}</div>
+                        <div className="text-2xl font-black text-gray-900">{bwmResult.rawGreenScore}%</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl p-3">
+                        <div className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">{t('Risk cap', 'ঝুঁকি সীমা')}</div>
+                        <div className={`text-2xl font-black ${bwmResult.riskFlag ? 'text-red-600' : 'text-gray-300'}`}>
+                            {bwmResult.riskFlag ? `${CRITICAL_RISK_CAP}%` : '—'}
+                        </div>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl p-3">
+                        <div className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">{t('Evidence', 'প্রমাণ')}</div>
+                        <div className="text-2xl font-black text-green-600">+{bwmResult.evidenceBonus}%</div>
+                    </div>
+                    <div className="bg-green-50 rounded-xl p-3 border-2 border-green-200">
+                        <div className="text-xs font-bold text-green-700 uppercase tracking-widest mb-1">{t('Final', 'চূড়ান্ত')}</div>
+                        <div className="text-2xl font-black text-green-700">{bwmResult.greenScore}%</div>
+                    </div>
+                </div>
+                {bwmResult.sectorMatched && (
+                    <div className="mt-4 text-xs text-gray-500">
+                        {t('Sector multipliers applied for:', 'সেক্টর মাল্টিপ্লায়ার:')} <span className="font-mono font-bold text-gray-700">{bwmResult.sectorMatched}</span>
+                    </div>
+                )}
+            </div>
+
+            {/* Strengths and priorities */}
+            {structuredRecs && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Strengths */}
+                    <div className="bg-green-50 rounded-2xl p-6 border border-green-100">
+                        <h4 className="font-display font-black text-green-900 text-base mb-3 flex items-center gap-2">
+                            <i className="fa-solid fa-thumbs-up"></i>
+                            {t('Green strengths', 'সবুজ শক্তি')}
+                        </h4>
+                        {structuredRecs.strengths.length === 0 ? (
+                            <p className="text-sm text-green-700/70">{t('No domain reached 75% yet — keep going.', 'কোনো ক্ষেত্র এখনো ৭৫% ছোঁয়নি — চালিয়ে যান।')}</p>
+                        ) : (
+                            <ul className="space-y-2">
+                                {structuredRecs.strengths.map(s => (
+                                    <li key={s.domain} className="flex justify-between items-center bg-white rounded-lg px-3 py-2">
+                                        <span className="text-sm font-semibold text-gray-700">{s.domainName[language]}</span>
+                                        <span className="text-sm font-black text-green-600">{Math.round(s.pct * 100)}%</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+
+                    {/* Priority improvement areas */}
+                    <div className="bg-orange-50 rounded-2xl p-6 border border-orange-100">
+                        <h4 className="font-display font-black text-orange-900 text-base mb-3 flex items-center gap-2">
+                            <i className="fa-solid fa-bullseye"></i>
+                            {t('Priority improvement areas', 'অগ্রাধিকার উন্নয়ন ক্ষেত্র')}
+                        </h4>
+                        {structuredRecs.priorityAreas.length === 0 ? (
+                            <p className="text-sm text-orange-700/70">{t('No high-impact gaps detected — well done.', 'উচ্চ-প্রভাবের ফাঁক নেই — চমৎকার।')}</p>
+                        ) : (
+                            <ul className="space-y-2">
+                                {structuredRecs.priorityAreas.map(p => (
+                                    <li key={p.domain} className="flex justify-between items-center bg-white rounded-lg px-3 py-2">
+                                        <span className="text-sm font-semibold text-gray-700">{p.domainName[language]}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-mono text-orange-500">×{p.multiplier}</span>
+                                            <span className="text-sm font-black text-orange-600">{Math.round(p.pct * 100)}%</span>
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Critical risk action items */}
+            {structuredRecs && structuredRecs.criticalRisks.length > 0 && (
+                <div className="bg-white rounded-2xl shadow-xl p-6 border-l-4 border-red-500">
+                    <h4 className="font-display font-black text-red-900 text-base mb-4 flex items-center gap-2">
+                        <i className="fa-solid fa-fire"></i>
+                        {t('Address these first (critical-risk items)', 'প্রথমে এগুলো ঠিক করুন (গুরুত্বপূর্ণ ঝুঁকি)')}
+                    </h4>
+                    <ul className="space-y-3">
+                        {structuredRecs.criticalRisks.slice(0, 5).map(c => (
+                            <li key={c.questionId} className="flex items-start gap-3 bg-red-50 rounded-lg p-3">
+                                <span className="text-xs font-mono font-black text-red-700 bg-white rounded px-2 py-1 shrink-0">{c.questionId}</span>
+                                <span className="text-sm text-gray-800 flex-1">{c.text[language]}</span>
+                                <span className="text-xs font-bold text-red-700 shrink-0 self-center">{t('Score', 'স্কোর')}: {c.score}/4</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {/* Low-cost vs investment actions */}
+            {structuredRecs && (structuredRecs.lowCostActions.length > 0 || structuredRecs.investmentActions.length > 0) && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {structuredRecs.lowCostActions.length > 0 && (
+                        <div className="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
+                            <h4 className="font-display font-black text-gray-800 text-base mb-4 flex items-center gap-2">
+                                <i className="fa-solid fa-hand-holding-heart text-emerald-600"></i>
+                                {t('Low-cost actions', 'কম খরচের পদক্ষেপ')}
+                            </h4>
+                            <ul className="space-y-2">
+                                {structuredRecs.lowCostActions.map(a => (
+                                    <li key={a.questionId} className="text-sm text-gray-700 leading-snug border-l-2 border-emerald-300 pl-3 py-1">
+                                        {a.text[language]}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                    {structuredRecs.investmentActions.length > 0 && (
+                        <div className="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
+                            <h4 className="font-display font-black text-gray-800 text-base mb-4 flex items-center gap-2">
+                                <i className="fa-solid fa-coins text-amber-600"></i>
+                                {t('Investment actions', 'বিনিয়োগের পদক্ষেপ')}
+                            </h4>
+                            <ul className="space-y-2">
+                                {structuredRecs.investmentActions.map(a => (
+                                    <li key={a.questionId} className="text-sm text-gray-700 leading-snug border-l-2 border-amber-300 pl-3 py-1">
+                                        {a.text[language]}
+                                        {a.financeLink && (
+                                            <span className="block text-xs font-mono text-amber-600 mt-0.5">{a.financeLink[language]}</span>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Certification readiness */}
+            {structuredRecs && structuredRecs.certificationPathways.length > 0 && (
+                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-6 border border-indigo-100">
+                    <h4 className="font-display font-black text-indigo-900 text-base mb-4 flex items-center gap-2">
+                        <i className="fa-solid fa-medal"></i>
+                        {t('Certification readiness', 'সার্টিফিকেশন প্রস্তুতি')}
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {structuredRecs.certificationPathways.map(c => (
+                            <div key={c.key} className="bg-white rounded-xl p-4 shadow-sm">
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className="font-bold text-gray-800 text-sm">{c.name[language]}</span>
+                                    <span className="font-black text-indigo-600 text-lg">{Math.round(c.pct * 100)}%</span>
+                                </div>
+                                <div className="w-full bg-gray-100 rounded-full h-2 mb-2">
+                                    <div className="h-full bg-indigo-500 rounded-full transition-all duration-700" style={{ width: `${Math.round(c.pct * 100)}%` }}></div>
+                                </div>
+                                <p className="text-xs text-gray-500 leading-snug">{c.description[language]}</p>
+                                <p className="text-[10px] font-mono text-gray-400 mt-1">
+                                    {c.achievingCount}/{c.applicableCount} {t('checks at score ≥ 3', 'চেক স্কোর ≥ ৩')}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 const ResultsPage: React.FC<{
     totalScore: number;
     scores: { [key: string]: number };
@@ -1197,7 +1423,9 @@ const ResultsPage: React.FC<{
     onStartOver: () => void;
     language: Language;
     isGuest: boolean;
-}> = ({ totalScore, scores, assessmentData, probingAnswers, onStartOver, language, isGuest }) => {
+    bwmResult: BwmResult | null;
+    structuredRecs: StructuredRecs | null;
+}> = ({ totalScore, scores, assessmentData, probingAnswers, onStartOver, language, isGuest, bwmResult, structuredRecs }) => {
     const [isExporting, setIsExporting] = useState(false);
     const [recommendations, setRecommendations] = useState('');
     
@@ -1374,7 +1602,9 @@ const ResultsPage: React.FC<{
                 </div>
 
                 <ResultsSummaryCard totalScore={totalScore} language={language} />
-                
+
+                {bwmResult && <BwmInsights bwmResult={bwmResult} structuredRecs={structuredRecs} language={language} />}
+
                 <div className="bg-white rounded-2xl shadow-xl p-8 mb-8 border border-gray-100">
                     <h3 className="text-xl font-black text-gray-800 mb-6 flex items-center gap-2">
                         <i className="fa-solid fa-layer-group text-indigo-600"></i>
@@ -1666,6 +1896,33 @@ const AuthScreen: React.FC<{ language: Language; onGuest: () => void }> = ({ lan
     );
 };
 
+// =============================================================================
+// Offline banner — shown when navigator.onLine is false. Submissions queue via
+// Firestore IndexedDB persistence and sync on reconnect.
+// =============================================================================
+const OfflineBanner: React.FC<{ language: Language }> = ({ language }) => {
+  const [online, setOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  useEffect(() => {
+    const onOnline = () => setOnline(true);
+    const onOffline = () => setOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
+  if (online) return null;
+  return (
+    <div className="bg-amber-500 text-amber-950 px-4 py-2 text-center text-sm font-bold flex items-center justify-center gap-2 z-[200] sticky top-0">
+      <i className="fa-solid fa-wifi-slash"></i>
+      {language === 'en'
+        ? 'You are offline. Your work is saved locally and will sync when you reconnect.'
+        : 'আপনি অফলাইনে আছেন। আপনার কাজ লোকালি সংরক্ষিত হচ্ছে এবং পুনঃসংযোগের সময় সিঙ্ক হবে।'}
+    </div>
+  );
+};
+
 // --- Main App Component ---
 export default function App() {
   const [language, setLanguage] = useState<Language>(() => {
@@ -1704,7 +1961,8 @@ export default function App() {
     }
   }, []);
 
-  // Save progress to localStorage whenever relevant state changes
+  // Save progress to localStorage whenever relevant state changes.
+  // Wrapped in try/catch since payload can exceed quota with many evidence images.
   useEffect(() => {
     const progress = {
         view,
@@ -1713,7 +1971,14 @@ export default function App() {
         probingAnswers,
         language
     };
-    localStorage.setItem('green_business_assessment_progress', JSON.stringify(progress));
+    try {
+      localStorage.setItem('green_business_assessment_progress', JSON.stringify(progress));
+    } catch (e) {
+      // Quota exceeded — drop assessmentData (heaviest field) and retry with just scores+answers
+      try {
+        localStorage.setItem('green_business_assessment_progress', JSON.stringify({ view, scores, probingAnswers, language }));
+      } catch {}
+    }
   }, [view, assessmentData, scores, probingAnswers, language]);
 
   const handleProbingComplete = useCallback((answers: ProbingAnswers) => {
@@ -1731,25 +1996,32 @@ export default function App() {
   
   const { currentUser, userProfile, signInWithGoogle, logout } = useAuth();
 
-  const totalScore = useMemo(() => {
-    if (!assessmentData) return 0;
-    
-    let sumScore = 0;
-    let sumMax = 0;
-    
-    assessmentData.forEach(group => {
-        group.questions.forEach(q => {
-            const score = scores[q.id];
-            if (score > -1 && q.weightPriority !== 'Pathway') {
-                const weight = getWeightNumber(q.weightPriority);
-                sumScore += (score * weight);
-                sumMax += (4 * weight);
-            }
-        });
-    });
+  // Temporary kill-switch: BWM scoring is disabled for now. When false,
+  // bwmResult stays null, which hides all BWM-derived UI (risk banner,
+  // sector multipliers, structured recommendations) and the Firestore
+  // payload's `bwm` field. totalScore falls back to a simple average.
+  const BWM_ENABLED = false;
 
-    return sumMax > 0 ? Math.round((sumScore / sumMax) * 100) : 0;
-  }, [scores, assessmentData]);
+  const bwmResult = useMemo<BwmResult | null>(() => {
+    if (!BWM_ENABLED) return null;
+    if (!assessmentData) return null;
+    const applicable = assessmentData.flatMap(g => g.questions);
+    return calculateBwmScore(applicable, scores, probingAnswers);
+  }, [scores, assessmentData, probingAnswers]);
+
+  const totalScore = useMemo(() => {
+    if (bwmResult) return bwmResult.greenScore;
+    const answered = Object.values(scores).filter(s => typeof s === 'number' && s >= 0 && s <= 4);
+    if (answered.length === 0) return 0;
+    const avg = answered.reduce((a, b) => a + b, 0) / answered.length;
+    return Math.round((avg / 4) * 100);
+  }, [bwmResult, scores]);
+
+  const structuredRecs = useMemo<StructuredRecs | null>(() => {
+    if (!bwmResult || !assessmentData) return null;
+    const applicable = assessmentData.flatMap(g => g.questions);
+    return generateRecommendations(applicable, scores, bwmResult);
+  }, [bwmResult, scores, assessmentData]);
 
   const handleAssessmentComplete = async (extraData: { images: string[], signature: string | null }) => {
     let metadata = {};
@@ -1771,7 +2043,7 @@ export default function App() {
 
     if (currentUser) {
       try {
-        await addDoc(collection(db, 'assessments'), {
+        const docPayload: any = {
           enumeratorId: currentUser.uid,
           createdAt: serverTimestamp(),
           probingAnswers: probingAnswers,
@@ -1780,6 +2052,24 @@ export default function App() {
           metadata,
           evidenceImages: extraData.images,
           signature: extraData.signature
+        };
+        if (bwmResult) {
+          docPayload.bwm = {
+            greenScore: bwmResult.greenScore,
+            rawGreenScore: bwmResult.rawGreenScore,
+            riskFlag: bwmResult.riskFlag,
+            triggeredRiskQuestions: bwmResult.triggeredRiskQuestions,
+            domainPercentages: bwmResult.domainPercentages,
+            evidenceBonus: bwmResult.evidenceBonus,
+            sectorMatched: bwmResult.sectorMatched,
+            applicableQuestionCount: bwmResult.applicableQuestionCount,
+            answeredQuestionCount: bwmResult.answeredQuestionCount,
+            evidenceQuestionCount: bwmResult.evidenceQuestionCount,
+          };
+        }
+        // Note: Firestore offline persistence queues this write if offline; it syncs on reconnect
+        addDoc(collection(db, 'assessments'), docPayload).catch(err => {
+          console.error("Failed to save assessment to database:", err);
         });
       } catch (err) {
         console.error("Failed to save assessment to database:", err);
@@ -1831,25 +2121,28 @@ export default function App() {
                     case 'probing':
                         return <ProbingQuestionsForm key="probing" onComplete={handleProbingComplete} language={language} isAdmin={userProfile?.role === 'admin'} />;
                     case 'assessment':
-                        return assessmentData && <AssessmentScreen 
+                        return assessmentData && <AssessmentScreen
                             key="assessment"
-                            assessmentData={assessmentData} 
-                            scores={scores} 
-                            onScoreChange={handleScoreChange} 
-                            onComplete={handleAssessmentComplete} 
+                            assessmentData={assessmentData}
+                            scores={scores}
+                            onScoreChange={handleScoreChange}
+                            onComplete={handleAssessmentComplete}
+                            onStartOver={handleStartOver}
                             language={language}
                             isAdmin={userProfile?.role === 'admin'}
                         />;
                     case 'results':
-                        return assessmentData && <ResultsPage 
+                        return assessmentData && <ResultsPage
                             key="results"
-                            totalScore={totalScore} 
-                            scores={scores} 
-                            assessmentData={assessmentData} 
-                            probingAnswers={probingAnswers} 
-                            onStartOver={handleStartOver} 
-                            language={language} 
+                            totalScore={totalScore}
+                            scores={scores}
+                            assessmentData={assessmentData}
+                            probingAnswers={probingAnswers}
+                            onStartOver={handleStartOver}
+                            language={language}
                             isGuest={isGuest}
+                            bwmResult={bwmResult}
+                            structuredRecs={structuredRecs}
                         />;
                     default:
                         return <ProbingQuestionsForm key="default" onComplete={handleProbingComplete} language={language} isAdmin={userProfile?.role === 'admin'} />;
@@ -1861,6 +2154,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-mesh text-gray-800 font-sans flex flex-col relative overflow-hidden selection:bg-indigo-100 selection:text-indigo-900">
+      <OfflineBanner language={language} />
       <header className="glass sticky top-0 z-[100] transition-all duration-300">
         <div className="container mx-auto px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-4 cursor-pointer group" onClick={handleStartOver}>
