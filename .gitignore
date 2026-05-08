@@ -29,3 +29,6 @@ _MODULE_SPECS.md
 *.njsproj
 *.sln
 *.sw?
+
+#temp docs
+/temp_docs

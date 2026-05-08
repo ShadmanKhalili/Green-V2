@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Language, Indicator, Pillar, ProbingQuestion, ProbingAnswers, Domain, MainQuestion, WeightPriority, DomainCode } from './types';
 import { MAIN_QUESTIONS, DOMAINS } from './questionBank';
+import { selectCuratedQuestions } from './src/questions/selector';
 import { SCORING_OPTIONS, PROBING_QUESTIONS, SCORE_INTERPRETATIONS, SECTOR_BENCHMARKS, KEY_RESOURCES } from './constants';
 import { GoogleGenAI } from "@google/genai";
 import { useAuth } from './AuthContext';
@@ -104,14 +105,14 @@ const HelpTooltip: React.FC<{ evidenceExamples?: {en: string, bn: string}, langu
 };
 
 const generateCustomAssessmentData = (answers: ProbingAnswers) => {
-    // Determine which questions apply based on routing conditions
-    const applicableQuestions = MAIN_QUESTIONS.filter(q => {
-        const isMatched = q.routingCondition(answers);
-        return isMatched;
-    });
-    
-    console.log(`Routing Logic: ${applicableQuestions.length}/${MAIN_QUESTIONS.length} questions matched for profile.`);
-    
+    // Pass 1: routing predicates (gate by sector / footprint / facility / etc.)
+    const routedQuestions = MAIN_QUESTIONS.filter(q => q.routingCondition(answers));
+
+    // Pass 2: curated bucket quotas (spec target ~20–30 questions)
+    const applicableQuestions = selectCuratedQuestions(routedQuestions);
+
+    console.log(`Routing: ${routedQuestions.length}/${MAIN_QUESTIONS.length} matched → ${applicableQuestions.length} after curated quota selection.`);
+
     // Group by Domain
     const groupedByDomain: { domain: Domain; questions: MainQuestion[] }[] = [];
     DOMAINS.forEach(domain => {
