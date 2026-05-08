@@ -11,7 +11,7 @@ import {
   updateProfile
 } from 'firebase/auth';
 import { auth, googleProvider, db } from './firebase';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { SUPER_ADMIN_EMAIL } from './src/admin/constants';
 
 export type UserRole = 'enumerator' | 'admin';
@@ -46,6 +46,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // Pull the latest server-side state (picks up emailVerified after the
+        // user clicks the verification link without needing a full re-login)
+        // and force a fresh ID token so Firestore rules see current claims.
+        try {
+          await user.reload();
+          await user.getIdToken(true);
+        } catch (e) {
+          console.warn('Failed to refresh user state/token:', e);
+        }
+      }
       setCurrentUser(user);
       if (user) {
         const isVerifiedSuperAdmin = user.email === SUPER_ADMIN_EMAIL && user.emailVerified;
@@ -53,8 +64,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const profileDoc = await getDoc(doc(db, 'userProfiles', user.uid));
           if (profileDoc.exists()) {
             const data = profileDoc.data() as UserProfile;
-            // Verified super admin always sees admin role in UI, even if their stored
-            // profile predates verification. Firestore rules independently enforce access.
+            // For verified super admin: persist admin role to the doc (rules
+            // allow this update because isSuperAdmin() is true), so any other
+            // admin checks that rely on the doc role also pass.
+            if (isVerifiedSuperAdmin && data.role !== 'admin') {
+              try {
+                await updateDoc(doc(db, 'userProfiles', user.uid), {
+                  role: 'admin',
+                  name: data.name || user.displayName || '',
+                });
+              } catch (promoteErr) {
+                console.warn('Could not auto-promote super admin profile to admin:', promoteErr);
+              }
+            }
             setUserProfile(isVerifiedSuperAdmin && data.role !== 'admin' ? { ...data, role: 'admin' } : data);
           } else {
             const newProfile: UserProfile = {
