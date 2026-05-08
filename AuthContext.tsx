@@ -11,10 +11,13 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider, db } from './firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { SUPER_ADMIN_EMAIL } from './src/admin/constants';
+
+export type UserRole = 'enumerator' | 'admin';
 
 export interface UserProfile {
   email: string;
-  role: 'enumerator' | 'admin';
+  role: UserRole;
   name?: string;
   createdAt?: any;
 }
@@ -43,16 +46,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
+        const isVerifiedSuperAdmin = user.email === SUPER_ADMIN_EMAIL && user.emailVerified;
         try {
           const profileDoc = await getDoc(doc(db, 'userProfiles', user.uid));
           if (profileDoc.exists()) {
-            setUserProfile(profileDoc.data() as UserProfile);
+            const data = profileDoc.data() as UserProfile;
+            // Verified super admin always sees admin role in UI, even if their stored
+            // profile predates verification. Firestore rules independently enforce access.
+            setUserProfile(isVerifiedSuperAdmin && data.role !== 'admin' ? { ...data, role: 'admin' } : data);
           } else {
-            // Create default enumerator profile
-            const isSuperAdmin = user.email === 'sadmankhalili@gmail.com';
             const newProfile: UserProfile = {
               email: user.email || '',
-              role: isSuperAdmin ? 'admin' : 'enumerator',
+              role: isVerifiedSuperAdmin ? 'admin' : 'enumerator',
               name: user.displayName || '',
             };
             await setDoc(doc(db, 'userProfiles', user.uid), {

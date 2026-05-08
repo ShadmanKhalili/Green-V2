@@ -1,18 +1,28 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { collection, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../AuthContext';
 import { DOMAINS, MAIN_QUESTIONS } from '../questionBank';
 import { PROBING_QUESTIONS } from '../constants';
-import { 
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
+import {
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
     Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area,
     RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ScatterChart, Scatter, ZAxis
 } from 'recharts';
 import { format, subDays, isAfter, isBefore, startOfDay } from 'date-fns';
 import { generateNarrativeInsights } from './services/geminiService';
+import { SubmissionsTab } from './admin/SubmissionsTab';
+import { UsersTab, UserDoc } from './admin/UsersTab';
+import { SettingsTab } from './admin/SettingsTab';
+import { UserRole } from '../AuthContext';
+
+type AdminTab = 'overview' | 'submissions' | 'users' | 'settings';
 
 export const AdminDashboard: React.FC<{ onViewAssessment: () => void }> = ({ onViewAssessment }) => {
+  const [tab, setTab] = useState<AdminTab>('overview');
+  const [users, setUsers] = useState<UserDoc[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [usersError, setUsersError] = useState<string | null>(null);
   const { userProfile } = useAuth();
   const [assessments, setAssessments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,6 +53,42 @@ export const AdminDashboard: React.FC<{ onViewAssessment: () => void }> = ({ onV
     };
     fetchAssessments();
   }, [userProfile]);
+
+  const fetchUsers = useCallback(async () => {
+    if (userProfile?.role !== 'admin') return;
+    setUsersLoading(true);
+    setUsersError(null);
+    try {
+      const snap = await getDocs(collection(db, 'userProfiles'));
+      setUsers(snap.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          email: data.email || '',
+          role: (data.role as UserRole) || 'enumerator',
+          name: data.name || '',
+          createdAt: data.createdAt,
+        };
+      }));
+    } catch (err: any) {
+      console.error("Error fetching users:", err);
+      setUsersError(err.message || 'Failed to load users');
+    } finally {
+      setUsersLoading(false);
+    }
+  }, [userProfile]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  const handleSubmissionDeleted = (id: string) => {
+    setAssessments(prev => prev.filter(a => a.id !== id));
+  };
+
+  const handleUserRoleChanged = (id: string, role: UserRole) => {
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, role } : u));
+  };
 
   const filteredAssessments = useMemo(() => {
     let filtered = assessments;
@@ -415,44 +461,77 @@ export const AdminDashboard: React.FC<{ onViewAssessment: () => void }> = ({ onV
 
   if (userProfile?.role !== 'admin') return null;
 
+  const tabs: { id: AdminTab; label: string; icon: string }[] = [
+    { id: 'overview',    label: 'Overview',    icon: 'fa-chart-pie' },
+    { id: 'submissions', label: 'Submissions', icon: 'fa-clipboard-list' },
+    { id: 'users',       label: 'Users',       icon: 'fa-users' },
+    { id: 'settings',    label: 'Settings',    icon: 'fa-gear' },
+  ];
+
   return (
     <div className="bg-white border border-gray-100 rounded-3xl p-6 md:p-10 shadow-xl mb-12">
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-10 gap-6">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-6">
         <div>
            <div className="flex items-center gap-3">
                <div className="w-12 h-12 bg-green-600 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-green-100">
                     <i className="fa-solid fa-chart-pie"></i>
                </div>
                <div>
-                   <h2 className="text-3xl font-black text-gray-900 tracking-tight">Admin Dashboard</h2>
-                   <p className="text-gray-400 font-medium text-sm">Strategic sustainability insights and engine health</p>
+                   <h2 className="text-3xl font-black text-gray-900 tracking-tight">Admin Panel</h2>
+                   <p className="text-gray-400 font-medium text-sm">Full control · stats · submissions · users</p>
                </div>
            </div>
         </div>
-        
+
         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-          <div className="relative flex-grow lg:flex-grow-0">
-             <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-             <input 
-                type="text" 
-                placeholder="Search SMEs..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-3 border border-gray-100 bg-gray-50/50 rounded-2xl focus:ring-4 focus:ring-green-500/10 focus:border-green-500 transition-all text-sm w-full lg:w-64"
-             />
-          </div>
-          <button onClick={onViewAssessment} className="px-6 py-3 bg-gray-900 text-white font-black rounded-2xl hover:bg-black transition-all shadow-lg active:scale-95 flex items-center gap-2">
+          {tab === 'overview' && (
+            <>
+              <div className="relative flex-grow lg:flex-grow-0">
+                 <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                 <input
+                    type="text"
+                    placeholder="Search SMEs..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 pr-4 py-3 border border-gray-100 bg-gray-50/50 rounded-2xl focus:ring-4 focus:ring-green-500/10 focus:border-green-500 transition-all text-sm w-full lg:w-64"
+                 />
+              </div>
+              <button onClick={handleDownload} className="px-5 py-3 border-2 border-indigo-600 text-indigo-600 font-black rounded-2xl hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2 text-sm">
+                  <i className="fa-solid fa-file-csv opacity-60"></i> Raw CSV
+              </button>
+              <button onClick={handleDownloadSummary} className="px-5 py-3 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg text-sm">
+                  <i className="fa-solid fa-file-lines opacity-60"></i> Summary
+              </button>
+            </>
+          )}
+          <button onClick={onViewAssessment} className="px-5 py-3 bg-gray-900 text-white font-black rounded-2xl hover:bg-black transition-all shadow-lg active:scale-95 flex items-center gap-2 text-sm">
               <i className="fa-solid fa-plus uppercase text-xs opacity-60"></i> New
-          </button>
-          <button onClick={handleDownload} className="px-6 py-3 border-2 border-indigo-600 text-indigo-600 font-black rounded-2xl hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2">
-              <i className="fa-solid fa-file-csv opacity-60"></i> Raw Data
-          </button>
-          <button onClick={handleDownloadSummary} className="px-6 py-3 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg">
-              <i className="fa-solid fa-file-lines opacity-60"></i> Summary Report
           </button>
         </div>
       </div>
 
+      {/* Tab navigation */}
+      <div className="flex flex-wrap gap-1 mb-10 border-b border-gray-100 -mx-2 px-2">
+        {tabs.map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`relative px-5 py-3 text-sm font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
+              tab === t.id
+                ? 'text-indigo-600'
+                : 'text-gray-400 hover:text-gray-700'
+            }`}
+          >
+            <i className={`fa-solid ${t.icon} text-xs`}></i>
+            {t.label}
+            {tab === t.id && (
+              <span className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 rounded-t-full"></span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'overview' && (<>
       {/* AI Executive Summary */}
       <div className="mb-10 bg-gradient-to-br from-indigo-900 to-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-2xl">
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-[100px] -mr-32 -mt-32"></div>
@@ -929,6 +1008,26 @@ export const AdminDashboard: React.FC<{ onViewAssessment: () => void }> = ({ onV
                    setFilterDateRange('all');
                 }} className="mt-4 text-indigo-600 font-black text-sm hover:underline">Clear all filters</button>
         </div>
+      )}
+      </>)}
+
+      {tab === 'submissions' && (
+        <SubmissionsTab assessments={assessments} onDeleted={handleSubmissionDeleted} />
+      )}
+
+      {tab === 'users' && (
+        <UsersTab
+          assessments={assessments}
+          users={users}
+          loading={usersLoading}
+          error={usersError}
+          onRefresh={fetchUsers}
+          onRoleChanged={handleUserRoleChanged}
+        />
+      )}
+
+      {tab === 'settings' && (
+        <SettingsTab totalAssessments={assessments.length} totalUsers={users.length} />
       )}
     </div>
   );
