@@ -1982,13 +1982,26 @@ export default function App() {
   
   const { currentUser, userProfile, signInWithGoogle, logout } = useAuth();
 
+  // Temporary kill-switch: BWM scoring is disabled for now. When false,
+  // bwmResult stays null, which hides all BWM-derived UI (risk banner,
+  // sector multipliers, structured recommendations) and the Firestore
+  // payload's `bwm` field. totalScore falls back to a simple average.
+  const BWM_ENABLED = false;
+
   const bwmResult = useMemo<BwmResult | null>(() => {
+    if (!BWM_ENABLED) return null;
     if (!assessmentData) return null;
     const applicable = assessmentData.flatMap(g => g.questions);
     return calculateBwmScore(applicable, scores, probingAnswers);
   }, [scores, assessmentData, probingAnswers]);
 
-  const totalScore = bwmResult?.greenScore ?? 0;
+  const totalScore = useMemo(() => {
+    if (bwmResult) return bwmResult.greenScore;
+    const answered = Object.values(scores).filter(s => typeof s === 'number' && s >= 0 && s <= 4);
+    if (answered.length === 0) return 0;
+    const avg = answered.reduce((a, b) => a + b, 0) / answered.length;
+    return Math.round((avg / 4) * 100);
+  }, [bwmResult, scores]);
 
   const structuredRecs = useMemo<StructuredRecs | null>(() => {
     if (!bwmResult || !assessmentData) return null;
