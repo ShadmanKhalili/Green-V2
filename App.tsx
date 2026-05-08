@@ -1020,9 +1020,10 @@ const AssessmentScreen: React.FC<{
     scores: { [key: string]: number };
     onScoreChange: (id: string, score: number) => void;
     onComplete: (extraData: { images: string[], signature: string | null }) => void;
+    onStartOver: () => void;
     language: Language;
     isAdmin: boolean;
-}> = ({ assessmentData, scores, onScoreChange, onComplete, language, isAdmin }) => {
+}> = ({ assessmentData, scores, onScoreChange, onComplete, onStartOver, language, isAdmin }) => {
     const [images, setImages] = useState<string[]>([]);
     const [signature, setSignature] = useState<string | null>(null);
 
@@ -1106,8 +1107,8 @@ const AssessmentScreen: React.FC<{
                     onClick={() => onComplete({ images, signature })}
                     disabled={!isComplete}
                     className={`w-full py-4 px-6 font-bold text-xl rounded-xl shadow-md transition-all duration-300 flex items-center justify-center gap-3 ${
-                         isComplete 
-                             ? 'bg-green-600 text-white hover:bg-green-700 hover:shadow-lg transform hover:-translate-y-1' 
+                         isComplete
+                             ? 'bg-green-600 text-white hover:bg-green-700 hover:shadow-lg transform hover:-translate-y-1'
                              : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                     }`}
                 >
@@ -1118,11 +1119,24 @@ const AssessmentScreen: React.FC<{
                          </>
                     ) : (
                          <span>
-                             {language === 'en' 
-                                 ? `Please answer ${remainingCount} more required question${remainingCount !== 1 ? 's' : ''}` 
+                             {language === 'en'
+                                 ? `Please answer ${remainingCount} more required question${remainingCount !== 1 ? 's' : ''}`
                                  : `অনুগ্রহ করে আরও ${remainingCount}টি আবশ্যক প্রশ্নের উত্তর দিন`}
                          </span>
                     )}
+                </button>
+
+                <button
+                    onClick={() => {
+                        const confirmMsg = language === 'en'
+                            ? 'Discard this assessment and start a new one? All current answers will be lost.'
+                            : 'এই অ্যাসেসমেন্ট বাতিল করে নতুন একটি শুরু করবেন? বর্তমান সব উত্তর মুছে যাবে।';
+                        if (window.confirm(confirmMsg)) onStartOver();
+                    }}
+                    className="mt-4 w-full py-3 px-6 font-semibold text-base rounded-xl border border-red-200 bg-white text-red-600 hover:bg-red-50 hover:border-red-300 transition-colors flex items-center justify-center gap-2"
+                >
+                    <i className="fa-solid fa-trash-can"></i>
+                    <span>{language === 'en' ? 'Discard & Start New Assessment' : 'বাতিল করে নতুন অ্যাসেসমেন্ট শুরু করুন'}</span>
                 </button>
             </div>
         </motion.div>
@@ -2107,12 +2121,13 @@ export default function App() {
                     case 'probing':
                         return <ProbingQuestionsForm key="probing" onComplete={handleProbingComplete} language={language} isAdmin={userProfile?.role === 'admin'} />;
                     case 'assessment':
-                        return assessmentData && <AssessmentScreen 
+                        return assessmentData && <AssessmentScreen
                             key="assessment"
-                            assessmentData={assessmentData} 
-                            scores={scores} 
-                            onScoreChange={handleScoreChange} 
-                            onComplete={handleAssessmentComplete} 
+                            assessmentData={assessmentData}
+                            scores={scores}
+                            onScoreChange={handleScoreChange}
+                            onComplete={handleAssessmentComplete}
+                            onStartOver={handleStartOver}
                             language={language}
                             isAdmin={userProfile?.role === 'admin'}
                         />;
