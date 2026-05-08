@@ -1923,6 +1923,59 @@ const OfflineBanner: React.FC<{ language: Language }> = ({ language }) => {
   );
 };
 
+const VerifyEmailBanner: React.FC<{ language: Language }> = ({ language }) => {
+  const { currentUser, resendVerificationEmail } = useAuth();
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  if (!currentUser || currentUser.emailVerified) return null;
+
+  const handleResend = async () => {
+    setStatus('sending');
+    setErrorMsg('');
+    try {
+      await resendVerificationEmail();
+      setStatus('sent');
+    } catch (err: any) {
+      setStatus('error');
+      setErrorMsg(err?.message || 'Failed to send verification email.');
+    }
+  };
+
+  return (
+    <div className="bg-indigo-600 text-white px-4 py-2.5 text-sm flex flex-wrap items-center justify-center gap-3 z-[200] sticky top-0">
+      <i className="fa-solid fa-envelope-circle-check"></i>
+      <span className="font-semibold">
+        {language === 'en'
+          ? `Verify your email (${currentUser.email}) to unlock all features.`
+          : `সমস্ত বৈশিষ্ট্য আনলক করতে আপনার ইমেল (${currentUser.email}) যাচাই করুন।`}
+      </span>
+      {status === 'sent' ? (
+        <span className="text-emerald-200 font-bold"><i className="fa-solid fa-check mr-1"></i>{language === 'en' ? 'Email sent — check your inbox' : 'ইমেল পাঠানো হয়েছে — আপনার ইনবক্স দেখুন'}</span>
+      ) : (
+        <button
+          onClick={handleResend}
+          disabled={status === 'sending'}
+          className="px-3 py-1 bg-white text-indigo-700 rounded-full text-xs font-black uppercase tracking-widest hover:bg-indigo-50 transition-colors disabled:opacity-50"
+        >
+          {status === 'sending'
+            ? <><i className="fa-solid fa-spinner animate-spin mr-1"></i>{language === 'en' ? 'Sending…' : 'পাঠানো হচ্ছে…'}</>
+            : (language === 'en' ? 'Resend verification' : 'যাচাইকরণ পুনরায় পাঠান')}
+        </button>
+      )}
+      {status === 'error' && (
+        <span className="text-red-200 text-xs">{errorMsg}</span>
+      )}
+      <button
+        onClick={() => window.location.reload()}
+        className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded-full text-xs font-black uppercase tracking-widest transition-colors"
+      >
+        {language === 'en' ? "I've verified" : 'আমি যাচাই করেছি'}
+      </button>
+    </div>
+  );
+};
+
 // --- Main App Component ---
 export default function App() {
   const [language, setLanguage] = useState<Language>(() => {
@@ -2155,6 +2208,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-mesh text-gray-800 font-sans flex flex-col relative overflow-hidden selection:bg-indigo-100 selection:text-indigo-900">
       <OfflineBanner language={language} />
+      <VerifyEmailBanner language={language} />
       <header className="glass sticky top-0 z-[100] transition-all duration-300">
         <div className="container mx-auto px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-4 cursor-pointer group" onClick={handleStartOver}>

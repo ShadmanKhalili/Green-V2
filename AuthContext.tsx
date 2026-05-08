@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { 
-  User, 
-  onAuthStateChanged, 
-  signInWithPopup, 
-  signOut, 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
+import {
+  User,
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
   sendPasswordResetEmail,
+  sendEmailVerification,
   updateProfile
 } from 'firebase/auth';
 import { auth, googleProvider, db } from './firebase';
@@ -30,6 +31,7 @@ interface AuthContextType {
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   registerWithEmail: (email: string, pass: string, name: string) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  resendVerificationEmail: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -108,6 +110,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       await updateProfile(userCredential.user, { displayName: name });
+      try {
+        await sendEmailVerification(userCredential.user);
+      } catch (verifyErr) {
+        console.warn("Account created but verification email failed to send:", verifyErr);
+      }
     } catch (error: any) {
       console.error("Error registering with email", error);
       if (error.code === 'auth/operation-not-allowed') {
@@ -126,6 +133,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const resendVerificationEmail = async () => {
+    if (!auth.currentUser) {
+      throw new Error("No user is signed in.");
+    }
+    if (auth.currentUser.emailVerified) {
+      throw new Error("This email is already verified.");
+    }
+    await sendEmailVerification(auth.currentUser);
+  };
+
   const logout = () => {
     return signOut(auth);
   };
@@ -138,6 +155,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signInWithEmail,
     registerWithEmail,
     resetPassword,
+    resendVerificationEmail,
     logout,
   };
 
