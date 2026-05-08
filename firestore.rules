@@ -45,7 +45,7 @@ service cloud.firestore {
         data.email is string && data.email.size() <= 256 &&
         data.role in ['enumerator', 'admin'] &&
         (data.keys().hasAll(['name']) ? (data.name is string && data.name.size() <= 100) : true) &&
-        isValidTimestamp(data.createdAt);
+        data.createdAt is timestamp;
     }
 
     function isValidAssessment(data) {
@@ -68,15 +68,17 @@ service cloud.firestore {
       allow get: if isValidId(userId) && (isSuperAdmin() || isAdmin() || (isSignedIn() && request.auth.uid == userId));
       allow list: if isSuperAdmin() || isAdmin();
       
-      // Bootstrap creation or admin creation
-      allow create: if isValidId(userId) && userId == request.auth.uid && isSignedIn() && (
-        isSuperAdmin() || (
-            // A regular user can ONLY create an enumerator profile for themselves
-            isValidUserProfile(incoming()) && incoming().role == 'enumerator'
-        )
-      );
+      // Bootstrap creation or admin creation. Always validate shape and require
+      // a fresh server timestamp on createdAt so users can't backdate profiles.
+      allow create: if isValidId(userId) &&
+        userId == request.auth.uid &&
+        isSignedIn() &&
+        isValidUserProfile(incoming()) &&
+        incoming().createdAt == request.time &&
+        (isSuperAdmin() || incoming().role == 'enumerator');
 
-      // Only admins can update user profiles
+      // Only admins can update user profiles. createdAt is preserved by the
+      // affectedKeys clause; isValidUserProfile here only validates shape.
       allow update: if isValidId(userId) && (isSuperAdmin() || isAdmin()) && isValidUserProfile(incoming()) && (
         incoming().diff(existing()).affectedKeys().hasOnly(['role', 'name'])
       );
