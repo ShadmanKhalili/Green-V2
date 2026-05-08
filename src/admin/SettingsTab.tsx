@@ -90,7 +90,7 @@ export const SettingsTab: React.FC<Props> = ({ totalAssessments, totalUsers }) =
         </div>
         <InfoRow label="Project ID" value={projectId} copy />
         <InfoRow label="Auth domain" value={(firebaseConfig as any).authDomain} copy />
-        <InfoRow label="Firestore DB" value={(firebaseConfig as any).firestoreDatabaseId} copy />
+        <InfoRow label="Firestore DB" value={(firebaseConfig as any).firestoreDatabaseId || '(default)'} copy />
         <InfoRow label="Storage bucket" value={(firebaseConfig as any).storageBucket} copy />
         <InfoRow label="Total assessments" value={totalAssessments} />
         <InfoRow label="Total users" value={totalUsers} />
