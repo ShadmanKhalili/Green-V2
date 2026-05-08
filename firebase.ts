@@ -18,10 +18,16 @@ let db;
 try {
   db = initFirestore({
     localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    // Auto-fallback to long-polling if WebSocket-style channels are blocked
+    // (common with ad-blockers and corporate firewalls that flag firestore.googleapis.com).
+    experimentalAutoDetectLongPolling: true,
   });
 } catch (err) {
   console.warn('Firestore persistent cache unavailable, falling back to memory cache:', err);
-  db = initFirestore({ localCache: memoryLocalCache() });
+  db = initFirestore({
+    localCache: memoryLocalCache(),
+    experimentalAutoDetectLongPolling: true,
+  });
 }
 export { db };
 
